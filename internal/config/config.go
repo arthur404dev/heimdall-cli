@@ -187,7 +187,7 @@ var (
 
 	// Default configuration values
 	defaults = Config{
-		Version: "1.0.0",
+		Version: "0.2.0",
 		Theme: ThemeConfig{
 			EnableTerm:      true,
 			EnableHypr:      true,
