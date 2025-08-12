@@ -25,6 +25,7 @@ Heimdall is a comprehensive command-line interface tool designed for managing yo
 - 🐚 **Shell Integration** - Interactive shell with IPC daemon
 - 😊 **Emoji Picker** - Quick emoji selection tool
 - 🖼️ **PiP Mode** - Picture-in-Picture support for applications
+- ⚙️ **Fully Configurable** - Extensive JSON configuration for all features
 
 ## Installation
 
@@ -66,6 +67,21 @@ heimdall init
 
 # Or migrate from Caelestia dotfiles
 heimdall migrate --from-caelestia
+```
+
+### Configuration
+
+Heimdall uses a JSON configuration file located at `~/.config/heimdall/config.json`. All aspects of Heimdall's behavior can be customized through this file.
+
+📚 **[View the complete Configuration Guide](docs/CONFIGURATION.md)** for detailed information about all available options.
+
+Quick configuration example:
+```bash
+# Copy example configuration
+cp config-example.json ~/.config/heimdall/config.json
+
+# Edit with your preferred editor
+nano ~/.config/heimdall/config.json
 ```
 
 ### Basic Usage
@@ -250,66 +266,44 @@ heimdall pip --app firefox
 
 ## Configuration
 
-Heimdall uses a YAML configuration file located at `~/.config/heimdall/config.yaml`.
+Heimdall uses a comprehensive JSON configuration system that allows you to customize every aspect of its behavior.
 
-### Example Configuration
+📚 **[Read the Complete Configuration Guide](docs/CONFIGURATION.md)**
 
-```yaml
-version: "1.0"
+### Quick Overview
 
-theme:
-  enableTerm: true
-  enableHypr: true
-  enableDiscord: true
-  enableSpicetify: true
-  enableFuzzel: true
-  enableBtop: true
-  enableGtk: true
-  enableQt: true
+The configuration file is located at `~/.config/heimdall/config.json` and includes settings for:
 
-scheme:
-  default: "catppuccin-mocha"
-  auto_mode: true
-  material_you: true
+- **Theme Management** - Control which applications receive theme updates
+- **Screenshot & Recording** - Custom directories, file formats, and notifications
+- **Clipboard & Emoji** - Fuzzel integration and picker settings
+- **PiP Mode** - Picture-in-Picture window management
+- **Notifications** - Desktop notification preferences
+- **External Tools** - Custom paths for all external dependencies
+- **And much more!**
 
-wallpaper:
-  directory: "~/Pictures/Wallpapers"
-  filter: true
-  threshold: 0.3
-  smart_mode: true
+### Example Configuration Snippet
 
-shell:
-  command: "bash"
-  args: ["--norc"]
-  log_rules: "info"
-  daemon_port: 9999
+```json
+{
+  "version": "1.0.0",
+  "screenshot": {
+    "directory": "~/Pictures/Screenshots",
+    "file_format": "png",
+    "file_name_pattern": "screenshot_%Y%m%d_%H%M%S",
+    "copy_to_clipboard": true,
+    "open_with_swappy": true
+  },
+  "notification": {
+    "enabled": true,
+    "provider": "auto",
+    "default_timeout": 5
+  }
 
-external_tools:
-  grim: "/usr/bin/grim"
-  slurp: "/usr/bin/slurp"
-  swappy: "/usr/bin/swappy"
-  wl_clipboard: "/usr/bin/wl-copy"
-  wl_screenrec: "/usr/bin/wl-screenrec"
-  cliphist: "/usr/bin/cliphist"
-  fuzzel: "/usr/bin/fuzzel"
-  swww: "/usr/bin/swww"
-  hyprpicker: "/usr/bin/hyprpicker"
-
-toggles:
-  communication:
-    apps:
-      discord:
-        enable: true
-        match:
-          - class: "discord"
-        command: ["discord"]
-        move: true
-      whatsapp:
-        enable: true
-        match:
-          - class: "whatsapp"
-        move: true
+}
 ```
+
+See [`config-example.json`](config-example.json) for a complete example configuration.
 
 ## Development
 
