@@ -63,7 +63,46 @@ func migrateFromCaelestia(caelestiaConfigPath string) error {
 	}
 
 	// Set defaults first
-	setDefaults()
+	viper.SetDefault("version", "1.0.0")
+	viper.SetDefault("theme", ThemeConfig{
+		EnableTerm:      true,
+		EnableHypr:      true,
+		EnableDiscord:   true,
+		EnableSpicetify: true,
+		EnableFuzzel:    true,
+		EnableBtop:      true,
+		EnableGtk:       true,
+		EnableQt:        true,
+	})
+	viper.SetDefault("shell", ShellConfig{
+		Command:    "qs",
+		Args:       []string{"-c", "heimdall", "-n"},
+		DaemonPort: 9999,
+	})
+	viper.SetDefault("scheme", SchemeConfig{
+		Default:     "rosepine",
+		AutoMode:    true,
+		MaterialYou: true,
+	})
+	viper.SetDefault("wallpaper", WallpaperConfig{
+		Directory: paths.WallpapersDir,
+		Filter:    true,
+		Threshold: 0.8,
+		SmartMode: true,
+	})
+	viper.SetDefault("external", ExternalTools{
+		Grim:        "grim",
+		Slurp:       "slurp",
+		Swappy:      "swappy",
+		WlClipboard: "wl-copy",
+		WlScreenrec: "wl-screenrec",
+		Cliphist:    "cliphist",
+		Fuzzel:      "fuzzel",
+		DartSass:    "sass",
+		Libnotify:   "notify-send",
+		Qs:          "qs",
+		App2unit:    "app2unit",
+	})
 
 	// Migrate theme configuration
 	viper.Set("theme.enableTerm", caelestiaConfig.Theme.EnableTerm)
@@ -100,8 +139,9 @@ func migrateFromCaelestia(caelestiaConfigPath string) error {
 		return fmt.Errorf("failed to create Heimdall config directory: %w", err)
 	}
 
-	// Save migrated config
-	heimdallConfigPath := filepath.Join(paths.HeimdallConfigDir, "config.yaml")
+	// Save migrated config as JSON
+	heimdallConfigPath := filepath.Join(paths.HeimdallConfigDir, "config.json")
+	viper.SetConfigType("json") // Set to JSON
 	if err := viper.SafeWriteConfigAs(heimdallConfigPath); err != nil {
 		return fmt.Errorf("failed to save migrated config: %w", err)
 	}
@@ -173,12 +213,59 @@ func migrateStateFiles() error {
 	return nil
 }
 
+// migrateFromYAML migrates configuration from YAML format to JSON format
+func migrateFromYAML(yamlConfigPath string) error {
+	// Read existing YAML config
+	viper.SetConfigFile(yamlConfigPath)
+	viper.SetConfigType("yaml")
+
+	if err := viper.ReadInConfig(); err != nil {
+		return fmt.Errorf("failed to read YAML config: %w", err)
+	}
+
+	// Create backup of YAML config
+	backupPath := yamlConfigPath + ".backup"
+	if err := paths.CopyFile(yamlConfigPath, backupPath); err != nil {
+		return fmt.Errorf("failed to backup YAML config: %w", err)
+	}
+
+	// Ensure Heimdall config directory exists
+	if err := paths.EnsureDir(paths.HeimdallConfigDir); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Save as JSON
+	jsonConfigPath := filepath.Join(paths.HeimdallConfigDir, "config.json")
+	viper.SetConfigType("json")
+	if err := viper.WriteConfigAs(jsonConfigPath); err != nil {
+		return fmt.Errorf("failed to save JSON config: %w", err)
+	}
+
+	// Remove old YAML config
+	if err := os.Remove(yamlConfigPath); err != nil {
+		// Non-fatal error, just log it
+		fmt.Fprintf(os.Stderr, "Warning: Failed to remove old YAML config: %v\n", err)
+	}
+
+	fmt.Printf("Successfully migrated configuration from YAML to JSON\n")
+	fmt.Printf("Backup saved at: %s\n", backupPath)
+	fmt.Printf("New config saved at: %s\n", jsonConfigPath)
+
+	return nil
+}
+
 // CheckForMigration checks if migration from Caelestia is needed
 func CheckForMigration() bool {
-	// Check if Heimdall config exists
-	heimdallConfig := filepath.Join(paths.HeimdallConfigDir, "config.yaml")
-	if paths.Exists(heimdallConfig) {
-		return false // Already configured
+	// Check if Heimdall JSON config exists
+	heimdallConfigJSON := filepath.Join(paths.HeimdallConfigDir, "config.json")
+	if paths.Exists(heimdallConfigJSON) {
+		return false // Already configured with JSON
+	}
+
+	// Check if Heimdall YAML config exists (needs migration to JSON)
+	heimdallConfigYAML := filepath.Join(paths.HeimdallConfigDir, "config.yaml")
+	if paths.Exists(heimdallConfigYAML) {
+		return true // Need to migrate from YAML to JSON
 	}
 
 	// Check if Caelestia config exists

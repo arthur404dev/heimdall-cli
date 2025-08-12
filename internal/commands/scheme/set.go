@@ -69,8 +69,8 @@ Examples:
 				return fmt.Errorf("invalid mode: %s (must be 'dark' or 'light')", mode)
 			}
 
-			// Load the scheme
-			newScheme, err := manager.LoadScheme(schemeName, flavour, mode)
+			// Load the scheme (with fallback to bundled)
+			newScheme, err := manager.LoadSchemeWithFallback(schemeName, flavour, mode)
 			if err != nil {
 				return fmt.Errorf("failed to load scheme: %w", err)
 			}

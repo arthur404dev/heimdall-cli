@@ -38,16 +38,29 @@ func NewCommand() *cobra.Command {
 func runScreenshot(cmd *cobra.Command, args []string) error {
 	cfg := config.Get()
 	external := cfg.External
+	screenshotCfg := cfg.Screenshot
+
+	// Use configured directory or fallback to default
+	screenshotDir := screenshotCfg.Directory
+	if screenshotDir == "" {
+		screenshotDir = paths.ScreenshotsDir
+	}
 
 	// Ensure screenshots directory exists
-	if err := paths.EnsureDir(paths.ScreenshotsDir); err != nil {
+	if err := paths.EnsureDir(screenshotDir); err != nil {
 		return fmt.Errorf("failed to create screenshots directory: %w", err)
 	}
 
-	// Generate filename with timestamp
-	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	filename := fmt.Sprintf("screenshot_%s.png", timestamp)
-	outputPath := filepath.Join(paths.ScreenshotsDir, filename)
+	// Generate filename with configured pattern
+	filePattern := screenshotCfg.FileNamePattern
+	if filePattern == "" {
+		filePattern = "screenshot_%Y%m%d_%H%M%S"
+	}
+	// Replace timestamp patterns
+	filename := strings.ReplaceAll(filePattern, "%Y%m%d", time.Now().Format("20060102"))
+	filename = strings.ReplaceAll(filename, "%H%M%S", time.Now().Format("150405"))
+	filename = fmt.Sprintf("%s.%s", filename, screenshotCfg.FileFormat)
+	outputPath := filepath.Join(screenshotDir, filename)
 
 	// Check if grim is available
 	grimPath := external.Grim
@@ -77,10 +90,11 @@ func runScreenshot(cmd *cobra.Command, args []string) error {
 			// Handle freeze option
 			if freeze {
 				// Take a temporary screenshot first
-				tempFile := filepath.Join(paths.ScreenshotsCacheDir, "freeze.png")
-				if err := paths.EnsureDir(paths.ScreenshotsCacheDir); err != nil {
+				cacheDir := filepath.Join(paths.HeimdallCacheDir, "screenshots")
+				if err := paths.EnsureDir(cacheDir); err != nil {
 					return fmt.Errorf("failed to create cache directory: %w", err)
 				}
+				tempFile := filepath.Join(cacheDir, screenshotCfg.FreezeFileName)
 
 				// Capture current screen
 				freezeCmd := exec.Command(grimPath, tempFile)
@@ -126,18 +140,20 @@ func runScreenshot(cmd *cobra.Command, args []string) error {
 
 	logger.Info("Screenshot saved", "path", outputPath)
 
-	// Copy to clipboard
-	if err := copyToClipboard(outputPath); err != nil {
-		logger.Warn("Failed to copy to clipboard", "error", err)
+	// Copy to clipboard if configured
+	if screenshotCfg.CopyToClipboard {
+		if err := copyToClipboard(outputPath, external); err != nil {
+			logger.Warn("Failed to copy to clipboard", "error", err)
+		}
 	}
 
-	// Send notification
-	if notify.IsAvailable() {
+	// Send notification if configured
+	if screenshotCfg.ShowNotification && notify.IsAvailable() {
 		notif := &notify.Notification{
 			Summary: "Screenshot captured",
 			Body:    fmt.Sprintf("Saved to %s", filename),
 			Icon:    outputPath,
-			Timeout: 3 * time.Second,
+			Timeout: screenshotCfg.GetNotificationTimeout(),
 		}
 
 		if err := notify.NewNotifier().Send(notif); err != nil {
@@ -145,27 +161,34 @@ func runScreenshot(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Open with swappy if available
-	swappyPath := external.Swappy
-	if swappyPath == "" {
-		swappyPath = "swappy"
-	}
+	// Open with swappy if configured and available
+	if screenshotCfg.OpenWithSwappy {
+		swappyPath := external.Swappy
+		if swappyPath == "" {
+			swappyPath = "swappy"
+		}
 
-	if _, err := exec.LookPath(swappyPath); err == nil {
-		// Launch swappy in background
-		swappyCmd := exec.Command(swappyPath, "-f", outputPath)
-		if err := swappyCmd.Start(); err != nil {
-			logger.Warn("Failed to open with swappy", "error", err)
+		if _, err := exec.LookPath(swappyPath); err == nil {
+			// Launch swappy in background
+			swappyCmd := exec.Command(swappyPath, "-f", outputPath)
+			if err := swappyCmd.Start(); err != nil {
+				logger.Warn("Failed to open with swappy", "error", err)
+			}
 		}
 	}
 
 	return nil
 }
 
-func copyToClipboard(imagePath string) error {
+func copyToClipboard(imagePath string, external config.ExternalTools) error {
 	// Try wl-copy first
-	if _, err := exec.LookPath("wl-copy"); err == nil {
-		cmd := exec.Command("wl-copy", "-t", "image/png")
+	wlCopyPath := external.WlClipboard
+	if wlCopyPath == "" {
+		wlCopyPath = "wl-copy"
+	}
+
+	if _, err := exec.LookPath(wlCopyPath); err == nil {
+		cmd := exec.Command(wlCopyPath, "-t", "image/png")
 
 		// Open image file
 		file, err := os.Open(imagePath)
@@ -179,8 +202,13 @@ func copyToClipboard(imagePath string) error {
 	}
 
 	// Try xclip as fallback
-	if _, err := exec.LookPath("xclip"); err == nil {
-		cmd := exec.Command("xclip", "-selection", "clipboard", "-t", "image/png", "-i", imagePath)
+	xclipPath := external.Xclip
+	if xclipPath == "" {
+		xclipPath = "xclip"
+	}
+
+	if _, err := exec.LookPath(xclipPath); err == nil {
+		cmd := exec.Command(xclipPath, "-selection", "clipboard", "-t", "image/png", "-i", imagePath)
 		return cmd.Run()
 	}
 

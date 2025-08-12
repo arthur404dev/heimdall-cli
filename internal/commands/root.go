@@ -52,7 +52,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/heimdall/config.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/heimdall/config.json)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug logging")
 
@@ -121,7 +121,7 @@ func initConfig() {
 		// Search config in home directory with name ".heimdall" (without extension).
 		viper.AddConfigPath(home + "/.config/heimdall")
 		viper.AddConfigPath(home + "/.config/caelestia") // Backward compatibility
-		viper.SetConfigType("yaml")
+		viper.SetConfigType("json")
 		viper.SetConfigName("config")
 	}
 
