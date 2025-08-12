@@ -2,7 +2,7 @@
 
 # Variables
 BINARY_NAME := heimdall
-PACKAGE := github.com/heimdall-cli/heimdall
+PACKAGE := github.com/arthur404dev/heimdall-cli
 CMD_PATH := ./cmd/heimdall
 BUILD_DIR := ./build
 DIST_DIR := ./dist
@@ -15,10 +15,10 @@ BUILT_BY := $(shell whoami)
 
 # Go build flags
 LDFLAGS := -ldflags "\
-	-X 'github.com/heimdall-cli/heimdall/internal/commands.Version=$(VERSION)' \
-	-X 'github.com/heimdall-cli/heimdall/internal/commands.Commit=$(COMMIT)' \
-	-X 'github.com/heimdall-cli/heimdall/internal/commands.Date=$(DATE)' \
-	-X 'github.com/heimdall-cli/heimdall/internal/commands.BuiltBy=$(BUILT_BY)' \
+	-X 'github.com/arthur404dev/heimdall-cli/internal/commands.Version=$(VERSION)' \
+	-X 'github.com/arthur404dev/heimdall-cli/internal/commands.Commit=$(COMMIT)' \
+	-X 'github.com/arthur404dev/heimdall-cli/internal/commands.Date=$(DATE)' \
+	-X 'github.com/arthur404dev/heimdall-cli/internal/commands.BuiltBy=$(BUILT_BY)' \
 	-s -w"
 
 # Go commands
