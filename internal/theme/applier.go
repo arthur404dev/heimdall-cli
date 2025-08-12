@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/heimdall-cli/heimdall/internal/utils/paths"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 )
 
 // Applier applies themes to various applications

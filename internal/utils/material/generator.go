@@ -5,7 +5,7 @@ import (
 	"image"
 	"math"
 
-	"github.com/heimdall-cli/heimdall/internal/utils/color"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/color"
 )
 
 // Generator creates Material You color palettes from images

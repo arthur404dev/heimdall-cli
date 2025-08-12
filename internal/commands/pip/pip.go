@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/heimdall-cli/heimdall/internal/config"
-	"github.com/heimdall-cli/heimdall/internal/utils/hypr"
-	"github.com/heimdall-cli/heimdall/internal/utils/logger"
-	"github.com/heimdall-cli/heimdall/internal/utils/notify"
-	"github.com/heimdall-cli/heimdall/internal/utils/paths"
+	"github.com/arthur404dev/heimdall-cli/internal/config"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/hypr"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/notify"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 	"github.com/spf13/cobra"
 )
 

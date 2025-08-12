@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/heimdall-cli/heimdall/internal/utils/color"
-	"github.com/heimdall-cli/heimdall/internal/utils/paths"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/color"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 )
 
 // Scheme represents a color scheme

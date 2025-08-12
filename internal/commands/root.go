@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/heimdall-cli/heimdall/internal/commands/clipboard"
-	"github.com/heimdall-cli/heimdall/internal/commands/emoji"
-	"github.com/heimdall-cli/heimdall/internal/commands/pip"
-	"github.com/heimdall-cli/heimdall/internal/commands/record"
-	"github.com/heimdall-cli/heimdall/internal/commands/scheme"
-	"github.com/heimdall-cli/heimdall/internal/commands/screenshot"
-	"github.com/heimdall-cli/heimdall/internal/commands/shell"
-	"github.com/heimdall-cli/heimdall/internal/commands/toggle"
-	"github.com/heimdall-cli/heimdall/internal/commands/wallpaper"
-	"github.com/heimdall-cli/heimdall/internal/utils/logger"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/clipboard"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/emoji"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/pip"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/record"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/scheme"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/screenshot"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/shell"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/toggle"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/wallpaper"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -24,7 +24,7 @@ var (
 	debug   bool
 
 	// Version information (set via ldflags)
-	Version = "dev"
+	Version = "0.2.0"
 	Commit  = "none"
 	Date    = "unknown"
 	BuiltBy = "unknown"
@@ -53,7 +53,7 @@ func init() {
 
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/heimdall/config.json)")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug logging")
 
 	// Bind flags to viper
@@ -63,6 +63,19 @@ func init() {
 	// Set version directly
 	rootCmd.Version = fmt.Sprintf("%s\nBuilt:   %s\nCommit:  %s\nBuilt by: %s",
 		Version, Date, Commit, BuiltBy)
+
+	// Add custom version command that works with 'heimdall version'
+	versionCmd := &cobra.Command{
+		Use:   "version",
+		Short: "Print the version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("heimdall version %s\n", Version)
+			fmt.Printf("Built:   %s\n", Date)
+			fmt.Printf("Commit:  %s\n", Commit)
+			fmt.Printf("Built by: %s\n", BuiltBy)
+		},
+	}
+	rootCmd.AddCommand(versionCmd)
 
 	// Add commands
 	addCommands()

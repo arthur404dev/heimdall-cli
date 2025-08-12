@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/heimdall-cli/heimdall/internal/scheme"
+	"github.com/arthur404dev/heimdall-cli/internal/scheme"
 	"github.com/spf13/cobra"
 )
 

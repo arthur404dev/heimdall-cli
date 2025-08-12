@@ -1,4 +1,4 @@
-module github.com/heimdall-cli/heimdall
+module github.com/arthur404dev/heimdall-cli
 
 go 1.24.5
 

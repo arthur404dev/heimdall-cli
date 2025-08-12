@@ -3,9 +3,9 @@ package commands
 import (
 	"fmt"
 
-	"github.com/heimdall-cli/heimdall/internal/utils/color"
-	"github.com/heimdall-cli/heimdall/internal/utils/hypr"
-	"github.com/heimdall-cli/heimdall/internal/utils/notify"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/color"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/hypr"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/notify"
 	"github.com/spf13/cobra"
 )
 

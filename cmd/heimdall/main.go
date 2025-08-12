@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/heimdall-cli/heimdall/internal/commands"
+	"github.com/arthur404dev/heimdall-cli/internal/commands"
 )
 
 // Version information set via ldflags

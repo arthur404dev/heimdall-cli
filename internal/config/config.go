@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/heimdall-cli/heimdall/internal/utils/paths"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 	"github.com/spf13/viper"
 )
 

@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/heimdall-cli/heimdall/internal/config"
-	"github.com/heimdall-cli/heimdall/internal/utils/notify"
-	"github.com/heimdall-cli/heimdall/internal/utils/paths"
+	"github.com/arthur404dev/heimdall-cli/internal/config"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/notify"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 	"github.com/spf13/cobra"
 )
 

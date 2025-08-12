@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/heimdall-cli/heimdall/internal/config"
-	"github.com/heimdall-cli/heimdall/internal/scheme"
-	"github.com/heimdall-cli/heimdall/internal/theme"
-	"github.com/heimdall-cli/heimdall/internal/utils/logger"
-	"github.com/heimdall-cli/heimdall/internal/utils/notify"
-	"github.com/heimdall-cli/heimdall/internal/utils/paths"
+	"github.com/arthur404dev/heimdall-cli/internal/config"
+	"github.com/arthur404dev/heimdall-cli/internal/scheme"
+	"github.com/arthur404dev/heimdall-cli/internal/theme"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/notify"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 	"github.com/spf13/cobra"
 )
 

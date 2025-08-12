@@ -12,14 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heimdall-cli/heimdall/internal/config"
-	"github.com/heimdall-cli/heimdall/internal/scheme"
-	"github.com/heimdall-cli/heimdall/internal/utils/color"
-	"github.com/heimdall-cli/heimdall/internal/utils/logger"
-	"github.com/heimdall-cli/heimdall/internal/utils/material"
-	"github.com/heimdall-cli/heimdall/internal/utils/notify"
-	"github.com/heimdall-cli/heimdall/internal/utils/paths"
-	"github.com/heimdall-cli/heimdall/internal/utils/wallpaper"
+	"github.com/arthur404dev/heimdall-cli/internal/config"
+	"github.com/arthur404dev/heimdall-cli/internal/scheme"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/color"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/material"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/notify"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/wallpaper"
 	"github.com/spf13/cobra"
 )
 

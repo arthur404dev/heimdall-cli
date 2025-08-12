@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/heimdall-cli/heimdall/assets/schemes"
-	"github.com/heimdall-cli/heimdall/internal/scheme"
+	"github.com/arthur404dev/heimdall-cli/assets/schemes"
+	"github.com/arthur404dev/heimdall-cli/internal/scheme"
 	"github.com/spf13/cobra"
 )
 

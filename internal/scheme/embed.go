@@ -6,8 +6,8 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/heimdall-cli/heimdall/assets/schemes"
-	"github.com/heimdall-cli/heimdall/internal/utils/color"
+	"github.com/arthur404dev/heimdall-cli/assets/schemes"
+	"github.com/arthur404dev/heimdall-cli/internal/utils/color"
 )
 
 // BundledScheme represents a bundled color scheme
