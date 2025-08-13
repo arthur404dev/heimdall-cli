@@ -17,8 +17,12 @@ import (
 // listCommand creates the scheme list subcommand
 func listCommand() *cobra.Command {
 	var (
-		schemeName string
-		flavour    string
+		schemeName   string
+		flavour      string
+		listNames    bool
+		listFlavours bool
+		listModes    bool
+		listVariants bool
 	)
 
 	cmd := &cobra.Command{
@@ -28,15 +32,36 @@ func listCommand() *cobra.Command {
 		
 Examples:
   heimdall scheme list                    # List all schemes in Caelestia format
+  heimdall scheme list -n                 # List scheme names only
+  heimdall scheme list -f                 # List flavours for current scheme
+  heimdall scheme list -m                 # List modes for current scheme/flavour
+  heimdall scheme list -v                 # List Material You variants
   heimdall scheme list -s rosepine        # List flavours for rosepine
   heimdall scheme list -s rosepine -f main # List modes for rosepine/main`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			manager := scheme.NewManager()
+
+			// Handle caelestia-compatible flags
+			if listNames {
+				return listSchemeNames(manager)
+			}
+
+			if listFlavours {
+				return listCurrentFlavours(manager, schemeName)
+			}
+
+			if listModes {
+				return listCurrentModes(manager, schemeName, flavour)
+			}
+
+			if listVariants {
+				return listMaterialYouVariants()
+			}
+
 			// If no flags, output in Caelestia JSON format
 			if schemeName == "" && flavour == "" {
 				return listCaelestiaFormat()
 			}
-
-			manager := scheme.NewManager()
 
 			// List modes for specific scheme/flavour
 			if schemeName != "" && flavour != "" {
@@ -73,7 +98,11 @@ Examples:
 	}
 
 	cmd.Flags().StringVarP(&schemeName, "scheme", "s", "", "Scheme name")
-	cmd.Flags().StringVarP(&flavour, "flavour", "f", "", "Flavour name")
+	cmd.Flags().StringVar(&flavour, "flavour", "", "Flavour name (when used with -s)")
+	cmd.Flags().BoolVarP(&listNames, "names", "n", false, "List scheme names only")
+	cmd.Flags().BoolVarP(&listFlavours, "flavours", "f", false, "List flavours for current scheme")
+	cmd.Flags().BoolVarP(&listModes, "modes", "m", false, "List modes for current scheme/flavour")
+	cmd.Flags().BoolVarP(&listVariants, "variants", "v", false, "List Material You variants")
 
 	return cmd
 }
@@ -232,4 +261,88 @@ func readMaterialYouColorFile(path string) (map[string]string, error) {
 	}
 
 	return colors, nil
+}
+
+// listSchemeNames lists all available scheme names
+func listSchemeNames(manager *scheme.Manager) error {
+	schemes, err := manager.ListSchemes()
+	if err != nil {
+		return err
+	}
+
+	sort.Strings(schemes)
+	for _, scheme := range schemes {
+		fmt.Println(scheme)
+	}
+	return nil
+}
+
+// listCurrentFlavours lists flavours for the current scheme or specified scheme
+func listCurrentFlavours(manager *scheme.Manager, schemeName string) error {
+	if schemeName == "" {
+		// Get current scheme
+		current, err := manager.GetCurrent()
+		if err != nil {
+			return err
+		}
+		schemeName = current.Name
+	}
+
+	flavours, err := manager.ListFlavours(schemeName)
+	if err != nil {
+		return err
+	}
+
+	sort.Strings(flavours)
+	for _, flavour := range flavours {
+		fmt.Println(flavour)
+	}
+	return nil
+}
+
+// listCurrentModes lists modes for the current scheme/flavour or specified scheme/flavour
+func listCurrentModes(manager *scheme.Manager, schemeName, flavour string) error {
+	if schemeName == "" || flavour == "" {
+		// Get current scheme
+		current, err := manager.GetCurrent()
+		if err != nil {
+			return err
+		}
+		if schemeName == "" {
+			schemeName = current.Name
+		}
+		if flavour == "" {
+			flavour = current.Flavour
+		}
+	}
+
+	modes, err := manager.ListModes(schemeName, flavour)
+	if err != nil {
+		return err
+	}
+
+	sort.Strings(modes)
+	for _, mode := range modes {
+		fmt.Println(mode)
+	}
+	return nil
+}
+
+// listMaterialYouVariants lists available Material You variants
+func listMaterialYouVariants() error {
+	variants := []string{
+		"tonalspot",
+		"neutral",
+		"vibrant",
+		"expressive",
+		"rainbow",
+		"fruitsalad",
+		"content",
+		"monochrome",
+	}
+
+	for _, variant := range variants {
+		fmt.Println(variant)
+	}
+	return nil
 }

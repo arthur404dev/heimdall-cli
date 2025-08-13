@@ -116,5 +116,14 @@
     "pidof": "pidof",
     "pkill": "pkill",
     "gdbus": "gdbus"
+  },
+  "config_paths": {
+    "base_dir": "~/.config/heimdall",
+    "file_pattern": "%s.json",
+    "schema_dir": "~/.config/heimdall/schemas",
+    "backup_dir": "~/.config/heimdall/backups",
+    "output_paths": {
+      "shell": "~/.config/quickshell/config/default.json"
+    }
   }
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/arthur404dev/heimdall-cli/internal/commands/clipboard"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/config"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/emoji"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/pip"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/record"
@@ -83,6 +84,9 @@ func init() {
 
 // addCommands adds all subcommands to the root command
 func addCommands() {
+	// Add config command (new unified configuration system)
+	rootCmd.AddCommand(config.Command())
+
 	// Add shell command
 	rootCmd.AddCommand(shell.Command())
 

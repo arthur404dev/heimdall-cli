@@ -5,12 +5,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/arthur404dev/heimdall-cli/internal/discord"
+	"github.com/arthur404dev/heimdall-cli/internal/terminal"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 )
 
 // Applier applies themes to various applications
 type Applier struct {
-	engine      *Engine
+	replacer    *SimpleReplacer
 	configDir   string
 	dataDir     string
 	templateDir string
@@ -19,7 +21,7 @@ type Applier struct {
 // NewApplier creates a new theme applier
 func NewApplier(configDir, dataDir string) *Applier {
 	return &Applier{
-		engine:      NewEngine(),
+		replacer:    NewSimpleReplacer(),
 		configDir:   configDir,
 		dataDir:     dataDir,
 		templateDir: filepath.Join(dataDir, "templates"),
@@ -31,6 +33,7 @@ func (a *Applier) ApplyTheme(app string, colors map[string]string, mode string) 
 	// Load the template for the application
 	templatePath := filepath.Join(a.templateDir, app+".tmpl")
 
+	var templateContent string
 	// Check if template exists
 	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
 		// Try embedded templates
@@ -38,24 +41,18 @@ func (a *Applier) ApplyTheme(app string, colors map[string]string, mode string) 
 		if err != nil {
 			return fmt.Errorf("template not found for %s: %w", app, err)
 		}
-		if err := a.engine.LoadTemplate(app, content); err != nil {
-			return err
-		}
+		templateContent = content
 	} else {
-		if err := a.engine.LoadTemplateFile(app, templatePath); err != nil {
-			return err
+		// Read template file
+		contentBytes, err := os.ReadFile(templatePath)
+		if err != nil {
+			return fmt.Errorf("failed to read template file %s: %w", templatePath, err)
 		}
+		templateContent = string(contentBytes)
 	}
 
-	// Prepare template data
-	data := map[string]interface{}{
-		"colors": colors,
-		"mode":   mode,
-		"isDark": mode == "dark",
-	}
-
-	// Render the template
-	rendered, err := a.engine.Render(app, data)
+	// Render the template using simple string replacement
+	rendered, err := a.replacer.ReplaceTemplate(templateContent, colors)
 	if err != nil {
 		return fmt.Errorf("failed to render theme for %s: %w", app, err)
 	}
@@ -73,7 +70,6 @@ func (a *Applier) ApplyTheme(app string, colors map[string]string, mode string) 
 func (a *Applier) ApplyAllThemes(colors map[string]string, mode string) error {
 	apps := []string{
 		"btop",
-		"discord",
 		"fuzzel",
 		"gtk",
 		"qt",
@@ -87,7 +83,58 @@ func (a *Applier) ApplyAllThemes(colors map[string]string, mode string) error {
 		}
 	}
 
+	// Apply Discord themes to all detected clients
+	if err := a.ApplyDiscordThemes(colors); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to apply Discord themes: %v\n", err)
+	}
+
+	// Generate and save terminal sequences
+	if err := a.ApplyTerminalSequences(colors); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to apply terminal sequences: %v\n", err)
+	}
+
 	return nil
+}
+
+// ApplyTerminalSequences generates and applies ANSI terminal sequences
+func (a *Applier) ApplyTerminalSequences(colors map[string]string) error {
+	builder := terminal.NewSequenceBuilder()
+	applier := terminal.NewApplier()
+
+	// Generate sequences
+	sequences, err := builder.GenerateSequences(colors)
+	if err != nil {
+		return fmt.Errorf("failed to generate terminal sequences: %w", err)
+	}
+
+	// Apply sequences to active terminals immediately (like caelestia)
+	if err := applier.ApplySequencesWithFallback(colors); err != nil {
+		// Log warning but don't fail the entire operation
+		fmt.Fprintf(os.Stderr, "Warning: failed to apply sequences to terminals: %v\n", err)
+	}
+
+	// Format for shell sourcing
+	shellScript := builder.FormatSequencesForShell(sequences)
+
+	// Write to sequences file
+	sequencesPath := filepath.Join(a.configDir, "sequences.txt")
+	if err := paths.AtomicWrite(sequencesPath, []byte(shellScript)); err != nil {
+		return fmt.Errorf("failed to write terminal sequences: %w", err)
+	}
+
+	return nil
+}
+
+// ApplyDiscordThemes applies themes to all detected Discord clients
+func (a *Applier) ApplyDiscordThemes(colors map[string]string) error {
+	clientManager := discord.NewClientManager()
+
+	// Get templates
+	cssTemplate := discord.GetTemplate("css")
+	betterDiscordTemplate := discord.GetTemplate("betterdiscord")
+
+	// Apply themes to all detected Discord clients
+	return clientManager.ApplyThemeToAll(colors, cssTemplate, betterDiscordTemplate)
 }
 
 // getOutputPath returns the output path for a themed application
@@ -95,8 +142,7 @@ func (a *Applier) getOutputPath(app string) string {
 	switch app {
 	case "btop":
 		return filepath.Join(a.configDir, "btop", "themes", "heimdall.theme")
-	case "discord":
-		return filepath.Join(a.configDir, "vesktop", "themes", "heimdall.css")
+	// Discord clients are now handled by ApplyDiscordThemes method
 	case "fuzzel":
 		return filepath.Join(a.configDir, "fuzzel", "fuzzel.ini")
 	case "gtk":
@@ -117,8 +163,7 @@ func (a *Applier) getEmbeddedTemplate(app string) (string, error) {
 	switch app {
 	case "btop":
 		return btopTemplate, nil
-	case "discord":
-		return discordTemplate, nil
+	// Discord templates are now handled by the Discord client manager
 	case "fuzzel":
 		return fuzzelTemplate, nil
 	case "gtk":
@@ -137,83 +182,41 @@ const btopTemplate = `# Heimdall theme for btop
 # Generated automatically
 
 # Main background and foreground
-theme[main_bg]="{{.colors.background}}"
-theme[main_fg]="{{.colors.on_background}}"
+theme[main_bg]="{{background}}"
+theme[main_fg]="{{foreground}}"
 
 # Title
-theme[title]="{{.colors.on_background}}"
+theme[title]="{{foreground}}"
 
 # Highlight
-theme[hi_fg]="{{.colors.primary}}"
+theme[hi_fg]="{{colour4}}"
 
 # Selected
-theme[selected_bg]="{{.colors.surface_variant}}"
-theme[selected_fg]="{{.colors.on_surface_variant}}"
+theme[selected_bg]="{{colour8}}"
+theme[selected_fg]="{{colour7}}"
 
 # Status
-theme[inactive_fg]="{{.colors.outline}}"
-theme[graph_text]="{{.colors.on_surface}}"
+theme[inactive_fg]="{{colour8}}"
+theme[graph_text]="{{foreground}}"
 
 # Process box
-theme[proc_misc]="{{.colors.secondary}}"
+theme[proc_misc]="{{colour5}}"
 
 # CPU box
-theme[cpu_box]="{{.colors.primary}}"
-theme[cpu_text]="{{.colors.on_primary}}"
+theme[cpu_box]="{{colour4}}"
+theme[cpu_text]="{{colour7}}"
 
 # Memory/Disk box
-theme[mem_box]="{{.colors.secondary}}"
-theme[mem_text]="{{.colors.on_secondary}}"
+theme[mem_box]="{{colour5}}"
+theme[mem_text]="{{colour7}}"
 
 # Network box
-theme[net_box]="{{.colors.tertiary}}"
-theme[net_text]="{{.colors.on_tertiary}}"
+theme[net_box]="{{colour6}}"
+theme[net_text]="{{colour7}}"
 
 # Process list
-theme[proc_box]="{{.colors.surface}}"
-theme[proc_text]="{{.colors.on_surface}}"
-`
-
-const discordTemplate = `/* Heimdall theme for Discord */
-/* Generated automatically */
-
-:root {
-    --primary: {{.colors.primary}};
-    --primary-container: {{.colors.primary_container}};
-    --on-primary: {{.colors.on_primary}};
-    --on-primary-container: {{.colors.on_primary_container}};
-    
-    --secondary: {{.colors.secondary}};
-    --secondary-container: {{.colors.secondary_container}};
-    --on-secondary: {{.colors.on_secondary}};
-    
-    --background: {{.colors.background}};
-    --surface: {{.colors.surface}};
-    --surface-variant: {{.colors.surface_variant}};
-    
-    --on-background: {{.colors.on_background}};
-    --on-surface: {{.colors.on_surface}};
-    --on-surface-variant: {{.colors.on_surface_variant}};
-    
-    --outline: {{.colors.outline}};
-    --outline-variant: {{.colors.outline_variant}};
-    
-    --error: {{.colors.error}};
-    --on-error: {{.colors.on_error}};
-}
-
-/* Discord specific mappings */
-.theme-{{if .isDark}}dark{{else}}light{{end}} {
-    --background-primary: var(--background);
-    --background-secondary: var(--surface);
-    --background-tertiary: var(--surface-variant);
-    
-    --text-normal: var(--on-background);
-    --text-muted: var(--on-surface-variant);
-    --interactive-normal: var(--on-surface);
-    --interactive-hover: var(--primary);
-    --interactive-active: var(--primary-container);
-}
+theme[proc_box]="{{colour0}}"
+theme[proc_text]="{{foreground}}"
 `
 
 const fuzzelTemplate = `# Heimdall theme for fuzzel

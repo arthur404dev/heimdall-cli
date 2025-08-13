@@ -21,6 +21,7 @@ import (
 // Command creates the pip command
 func Command() *cobra.Command {
 	var (
+		daemon bool
 		stop   bool
 		status bool
 	)
@@ -42,11 +43,17 @@ like video players and browsers.`,
 				return showStatus()
 			}
 
-			// Start daemon
+			if daemon {
+				// Start daemon
+				return startDaemon()
+			}
+
+			// Default behavior - start daemon
 			return startDaemon()
 		},
 	}
 
+	cmd.Flags().BoolVarP(&daemon, "daemon", "d", false, "Start PIP daemon")
 	cmd.Flags().BoolVar(&stop, "stop", false, "Stop the PIP daemon")
 	cmd.Flags().BoolVar(&status, "status", false, "Show daemon status")
 

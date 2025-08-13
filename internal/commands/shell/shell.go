@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/arthur404dev/heimdall-cli/internal/config"
+	"github.com/arthur404dev/heimdall-cli/internal/config/manager"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/notify"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
@@ -27,6 +28,8 @@ func Command() *cobra.Command {
 		stop     bool
 		list     bool
 		kill     bool
+		show     bool
+		log      bool
 		logRules string
 	)
 
@@ -38,10 +41,49 @@ func Command() *cobra.Command {
 The shell daemon runs attached by default (showing logs in terminal).
 Use -d flag to run in detached/daemon mode.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load configuration
+			// Load configuration (old system for backward compatibility)
 			if err := config.Load(); err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
+
+			// Ensure config is saved with all defaults merged
+			// This creates the file if it doesn't exist and adds any missing defaults
+			// while preserving existing user settings
+			if err := config.EnsureConfigSaved(); err != nil {
+				// Log warning but don't fail - the command can still run
+				logger.Warn("Failed to save config with defaults", "error", err)
+			}
+
+			// Initialize the new configuration manager to ensure domain configs exist
+			configMgr := manager.NewManager()
+
+			// Try to load paths from main config
+			configPath := os.Getenv("HEIMDALL_CONFIG")
+			if configPath == "" {
+				configPath = filepath.Join(paths.HeimdallConfigDir, "config.json")
+			}
+
+			if _, err := os.Stat(configPath); err == nil {
+				if err := configMgr.LoadPathsFromConfig(configPath); err != nil {
+					logger.Debug("Failed to load paths from config", "error", err)
+				}
+			}
+
+			// Initialize the manager (this creates default providers for cli and shell domains)
+			if err := configMgr.Initialize(); err != nil {
+				logger.Warn("Failed to initialize config manager", "error", err)
+			} else {
+				// Load all configurations (this will create files with defaults if they don't exist)
+				if err := configMgr.LoadAll(); err != nil {
+					logger.Debug("Failed to load all configs", "error", err)
+				}
+
+				// Save all configurations to ensure defaults are persisted
+				if err := configMgr.SaveAll(); err != nil {
+					logger.Warn("Failed to save domain configs", "error", err)
+				}
+			}
+
 			cfg := config.Get()
 
 			// Handle control flags
@@ -55,6 +97,14 @@ Use -d flag to run in detached/daemon mode.`,
 
 			if list {
 				return ListDaemon()
+			}
+
+			if show {
+				return ShowIPCCommands(cfg)
+			}
+
+			if log {
+				return ShowShellLog()
 			}
 
 			// Check if daemon is running
@@ -90,9 +140,11 @@ Use -d flag to run in detached/daemon mode.`,
 	}
 
 	cmd.Flags().BoolVarP(&daemon, "daemon", "d", false, "Run in daemon mode (detached)")
-	cmd.Flags().BoolVarP(&stop, "stop", "s", false, "Stop the running daemon")
-	cmd.Flags().BoolVarP(&list, "list", "l", false, "List running daemon status")
+	cmd.Flags().BoolVar(&stop, "stop", false, "Stop the running daemon")
+	cmd.Flags().BoolVar(&list, "list", false, "List running daemon status")
 	cmd.Flags().BoolVarP(&kill, "kill", "k", false, "Force kill the daemon")
+	cmd.Flags().BoolVarP(&show, "show", "s", false, "Print all shell IPC commands")
+	cmd.Flags().BoolVarP(&log, "log", "l", false, "Print the shell log")
 	cmd.Flags().StringVar(&logRules, "log-rules", "", "Set RUST_LOG environment variable")
 
 	return cmd
@@ -428,6 +480,47 @@ func ListDaemon() error {
 			fmt.Printf("Log file: %s (size: %d bytes)\n", logFile, info.Size())
 		}
 	}
+
+	return nil
+}
+
+// ShowIPCCommands shows all available IPC commands from the shell
+func ShowIPCCommands(cfg *config.Config) error {
+	// Create IPC client
+	client, err := NewIPCClient(cfg.Shell.DaemonPort)
+	if err != nil {
+		return fmt.Errorf("failed to create IPC client: %w", err)
+	}
+	defer client.Close()
+
+	// Send "ipc show" command to get all available IPC commands
+	response, err := client.SendMessage("ipc show")
+	if err != nil {
+		return fmt.Errorf("failed to get IPC commands: %w", err)
+	}
+
+	// Print response
+	fmt.Print(response)
+
+	return nil
+}
+
+// ShowShellLog shows the shell log output
+func ShowShellLog() error {
+	logFile := filepath.Join(paths.StateDir, "shell.log")
+
+	// Check if log file exists
+	if !paths.Exists(logFile) {
+		return fmt.Errorf("shell log file not found: %s", logFile)
+	}
+
+	// Read and print log file contents
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		return fmt.Errorf("failed to read log file: %w", err)
+	}
+
+	fmt.Print(string(content))
 
 	return nil
 }

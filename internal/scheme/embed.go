@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/arthur404dev/heimdall-cli/assets/schemes"
-	"github.com/arthur404dev/heimdall-cli/internal/utils/color"
 )
 
 // BundledScheme represents a bundled color scheme
@@ -121,20 +120,14 @@ func (m *Manager) InstallBundledScheme(name string) error {
 		Flavour: bundled.Flavour,
 		Mode:    bundled.Variant, // dark or light
 		Variant: bundled.Variant,
-		Colors:  make(map[string]*color.Color),
-		Metadata: SchemeMetadata{
-			Author:    bundled.Author,
-			Generated: false,
-		},
+		Colours: make(map[string]string),
 	}
 
-	// Convert color strings to Color objects
+	// Convert color strings (remove # prefix if present)
 	for key, hexColor := range bundled.Colors {
-		c, err := color.NewFromHex(hexColor)
-		if err != nil {
-			return fmt.Errorf("invalid color %s: %w", hexColor, err)
-		}
-		scheme.Colors[key] = c
+		// Remove # prefix if present
+		hexColor = strings.TrimPrefix(hexColor, "#")
+		scheme.Colours[key] = hexColor
 	}
 
 	// Save the scheme
@@ -227,20 +220,14 @@ func (m *Manager) LoadSchemeWithFallback(name, flavour, mode string) (*Scheme, e
 			Flavour: flavour,
 			Mode:    mode,
 			Variant: bundled.Variant,
-			Colors:  make(map[string]*color.Color),
-			Metadata: SchemeMetadata{
-				Author:    bundled.Author,
-				Generated: false,
-			},
+			Colours: make(map[string]string),
 		}
 
-		// Convert colors
+		// Convert colors (remove # prefix if present)
 		for key, hexColor := range bundled.Colors {
-			c, err := color.NewFromHex(hexColor)
-			if err != nil {
-				continue
-			}
-			scheme.Colors[key] = c
+			// Remove # prefix if present
+			hexColor = strings.TrimPrefix(hexColor, "#")
+			scheme.Colours[key] = hexColor
 		}
 
 		return scheme, nil

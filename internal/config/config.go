@@ -444,6 +444,23 @@ func Reload() error {
 	return Load()
 }
 
+// EnsureConfigSaved ensures the configuration file exists and contains all defaults
+// This merges defaults with existing config without overwriting user settings
+func EnsureConfigSaved() error {
+	// Ensure directory exists
+	if err := paths.EnsureDir(paths.HeimdallConfigDir); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// If config doesn't exist, it was already created by Load() with SaveDefaults()
+	// But we should save it again to ensure all current defaults are persisted
+	// This is important when new defaults are added in updates
+
+	// The current state in viper already has defaults merged with any existing config
+	// So saving now will preserve user settings while adding any missing defaults
+	return Save()
+}
+
 // GetTheme returns the theme configuration
 func GetTheme() ThemeConfig {
 	c := Get()

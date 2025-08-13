@@ -29,7 +29,7 @@ type Emoji struct {
 // Command creates the emoji command
 func Command() *cobra.Command {
 	var (
-		update bool
+		fetch  bool
 		picker bool
 	)
 
@@ -43,7 +43,7 @@ Features:
   - Fetch and update emoji database
   - Copy emoji to clipboard`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if update {
+			if fetch {
 				return updateEmojiData()
 			}
 
@@ -57,7 +57,7 @@ Features:
 		},
 	}
 
-	cmd.Flags().BoolVarP(&update, "update", "u", false, "Update emoji database")
+	cmd.Flags().BoolVarP(&fetch, "fetch", "f", false, "Fetch emoji/glyph data from remote")
 	cmd.Flags().BoolVarP(&picker, "picker", "p", false, "Run interactive emoji picker")
 
 	return cmd
