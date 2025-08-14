@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+# Wrapper script to ensure go build always outputs to build/ directory
+# This prevents accidentally creating binaries at the project root
+
+echo "Note: Building to ./build/ directory..."
+echo "Use 'make build' or 'make quick' for proper builds"
+echo ""
+
+mkdir -p build
+exec go build -o build/heimdall "$@" cmd/heimdall/main.go

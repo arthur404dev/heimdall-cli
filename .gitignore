@@ -1,3 +1,14 @@
 update_shell_config.sh
 /aur
 /build
+/dist
+/heimdall
+heimdall
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.html
+coverage.out

@@ -46,6 +46,13 @@ build:
 	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
+# Quick build (no version info, for development)
+quick:
+	@echo "Quick building $(BINARY_NAME)..."
+	@mkdir -p $(BUILD_DIR)
+	@go build -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
+
 # Build for all platforms
 build-all:
 	@echo "Building for all platforms..."
@@ -104,10 +111,32 @@ install: build
 	@sudo cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/
 	@echo "Installation complete"
 
+# Install the binary to user's local bin (~/.local/bin)
+install-local: build
+	@echo "Installing $(BINARY_NAME) to ~/.local/bin..."
+	@mkdir -p ~/.local/bin
+	@if [ -f ~/.local/bin/$(BINARY_NAME) ]; then \
+		mv ~/.local/bin/$(BINARY_NAME) ~/.local/bin/$(BINARY_NAME).old 2>/dev/null || true; \
+	fi
+	@cp $(BUILD_DIR)/$(BINARY_NAME) ~/.local/bin/
+	@chmod +x ~/.local/bin/$(BINARY_NAME)
+	@rm -f ~/.local/bin/$(BINARY_NAME).old
+	@echo "Installation complete at ~/.local/bin/$(BINARY_NAME)"
+	@echo "Make sure ~/.local/bin is in your PATH"
+
+# Update the binary in ~/.local/bin (alias for install-local)
+update: install-local
+
 # Uninstall the binary from system
 uninstall:
 	@echo "Uninstalling $(BINARY_NAME) from /usr/local/bin..."
 	@sudo rm -f /usr/local/bin/$(BINARY_NAME)
+	@echo "Uninstall complete"
+
+# Uninstall the binary from user's local bin
+uninstall-local:
+	@echo "Uninstalling $(BINARY_NAME) from ~/.local/bin..."
+	@rm -f ~/.local/bin/$(BINARY_NAME)
 	@echo "Uninstall complete"
 
 # Run the application
@@ -164,7 +193,8 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  all          - Clean, format, lint, test, and build"
-	@echo "  build        - Build the binary"
+	@echo "  build        - Build the binary with version info"
+	@echo "  quick        - Quick build for development (no version info)"
 	@echo "  build-all    - Build for all platforms"
 	@echo "  build-release- Build optimized release binary"
 	@echo "  clean        - Remove build artifacts"
@@ -172,8 +202,11 @@ help:
 	@echo "  coverage     - Run tests with coverage report"
 	@echo "  fmt          - Format code"
 	@echo "  lint         - Run linter"
-	@echo "  install      - Install binary to /usr/local/bin"
-	@echo "  uninstall    - Remove binary from /usr/local/bin"
+	@echo "  install      - Install binary to /usr/local/bin (requires sudo)"
+	@echo "  install-local- Install binary to ~/.local/bin"
+	@echo "  update       - Update binary in ~/.local/bin (alias for install-local)"
+	@echo "  uninstall    - Remove binary from /usr/local/bin (requires sudo)"
+	@echo "  uninstall-local - Remove binary from ~/.local/bin"
 	@echo "  run          - Build and run the application"
 	@echo "  run-args     - Build and run with arguments (ARGS=...)"
 	@echo "  dev          - Run with hot reload (requires air)"
