@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arthur404dev/heimdall-cli/internal/config"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 )
@@ -29,8 +30,19 @@ func (h *GTKHandler) Apply(colors map[string]string, mode string) error {
 	// Generate GTK CSS content
 	content := h.generateGTKCSS(colors, mode)
 
-	// Write to GTK3 config
+	// Get paths from config if available
+	cfg := config.Get()
 	gtk3Path := filepath.Join(h.configDir, ".config", "gtk-3.0", "gtk.css")
+	gtk4Path := filepath.Join(h.configDir, ".config", "gtk-4.0", "gtk.css")
+
+	if cfg != nil && cfg.Theme.Paths.Gtk3 != "" {
+		gtk3Path = cfg.Theme.Paths.Gtk3
+	}
+	if cfg != nil && cfg.Theme.Paths.Gtk4 != "" {
+		gtk4Path = cfg.Theme.Paths.Gtk4
+	}
+
+	// Write to GTK3 config
 	if err := h.writeThemeFile(gtk3Path, content); err != nil {
 		logger.Warn("Failed to write GTK3 theme", "error", err)
 	} else {
@@ -38,7 +50,6 @@ func (h *GTKHandler) Apply(colors map[string]string, mode string) error {
 	}
 
 	// Write to GTK4 config
-	gtk4Path := filepath.Join(h.configDir, ".config", "gtk-4.0", "gtk.css")
 	if err := h.writeThemeFile(gtk4Path, content); err != nil {
 		logger.Warn("Failed to write GTK4 theme", "error", err)
 	} else {

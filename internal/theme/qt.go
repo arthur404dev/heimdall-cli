@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/arthur404dev/heimdall-cli/internal/config"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 )
@@ -28,8 +29,19 @@ func (h *QtHandler) Apply(colors map[string]string, mode string) error {
 	// Generate Qt color configuration
 	content := h.generateQtColors(colors, mode)
 
-	// Write to Qt5ct config
+	// Get paths from config if available
+	cfg := config.Get()
 	qt5Path := filepath.Join(h.configDir, ".config", "qt5ct", "colors", "heimdall.conf")
+	qt6Path := filepath.Join(h.configDir, ".config", "qt6ct", "colors", "heimdall.conf")
+
+	if cfg != nil && cfg.Theme.Paths.Qt5 != "" {
+		qt5Path = cfg.Theme.Paths.Qt5
+	}
+	if cfg != nil && cfg.Theme.Paths.Qt6 != "" {
+		qt6Path = cfg.Theme.Paths.Qt6
+	}
+
+	// Write to Qt5ct config
 	if err := h.writeThemeFile(qt5Path, content); err != nil {
 		logger.Warn("Failed to write Qt5ct theme", "error", err)
 	} else {
@@ -37,7 +49,6 @@ func (h *QtHandler) Apply(colors map[string]string, mode string) error {
 	}
 
 	// Write to Qt6ct config
-	qt6Path := filepath.Join(h.configDir, ".config", "qt6ct", "colors", "heimdall.conf")
 	if err := h.writeThemeFile(qt6Path, content); err != nil {
 		logger.Warn("Failed to write Qt6ct theme", "error", err)
 	} else {

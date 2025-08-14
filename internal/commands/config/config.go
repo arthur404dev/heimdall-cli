@@ -6,7 +6,9 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/arthur404dev/heimdall-cli/internal/config"
 	"github.com/arthur404dev/heimdall-cli/internal/config/manager"
 	"github.com/arthur404dev/heimdall-cli/internal/config/providers"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
@@ -65,6 +67,8 @@ Examples:
 	cmd.AddCommand(saveCommand())
 	cmd.AddCommand(loadCommand())
 	cmd.AddCommand(schemaCommand())
+	cmd.AddCommand(defaultsCommand())
+	cmd.AddCommand(refreshCommand())
 
 	// Add 'all' subcommand for operations on all domains
 	cmd.AddCommand(allCommand())
@@ -252,6 +256,212 @@ func schemaCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// defaultsCommand resets configuration to defaults
+func defaultsCommand() *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "defaults",
+		Short: "Reset configuration to defaults",
+		Long: `Reset the heimdall configuration to default values.
+		
+This command will:
+  - Backup your current configuration
+  - Reset all values to defaults
+  - Preserve the backup in ~/.config/heimdall/config.json.backup
+
+Use --force to skip confirmation prompt.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Import the main config package
+			mainConfig := "github.com/arthur404dev/heimdall-cli/internal/config"
+			_ = mainConfig // We'll use the actual config package
+
+			configPath := os.ExpandEnv("$HOME/.config/heimdall/config.json")
+			backupPath := configPath + ".backup"
+
+			// Check if config exists
+			configExists := false
+			if _, err := os.Stat(configPath); err == nil {
+				configExists = true
+			}
+
+			// If config exists and not forcing, ask for confirmation
+			if configExists && !force {
+				fmt.Println("⚠️  WARNING: This will reset your configuration to defaults!")
+				fmt.Printf("Your current configuration will be backed up to: %s\n\n", backupPath)
+				fmt.Print("Are you sure you want to continue? (y/N): ")
+
+				var response string
+				fmt.Scanln(&response)
+				response = strings.ToLower(strings.TrimSpace(response))
+
+				if response != "y" && response != "yes" {
+					fmt.Println("❌ Operation cancelled")
+					return nil
+				}
+			}
+
+			// Backup existing config if it exists
+			if configExists {
+				// Read current config
+				currentData, err := os.ReadFile(configPath)
+				if err != nil {
+					return fmt.Errorf("failed to read current config: %w", err)
+				}
+
+				// Write backup with timestamp
+				timestamp := time.Now().Format("20060102-150405")
+				backupPathWithTime := fmt.Sprintf("%s.%s", backupPath, timestamp)
+				if err := os.WriteFile(backupPathWithTime, currentData, 0644); err != nil {
+					return fmt.Errorf("failed to create backup: %w", err)
+				}
+
+				// Also create a simple .backup file for easy access
+				if err := os.WriteFile(backupPath, currentData, 0644); err != nil {
+					// Not critical, just log
+					logger.Warn("Failed to create simple backup file", "error", err)
+				}
+
+				fmt.Printf("✓ Current configuration backed up to:\n")
+				fmt.Printf("  - %s (latest)\n", backupPath)
+				fmt.Printf("  - %s (timestamped)\n", backupPathWithTime)
+			}
+
+			// Remove current config
+			if configExists {
+				if err := os.Remove(configPath); err != nil {
+					return fmt.Errorf("failed to remove current config: %w", err)
+				}
+			}
+
+			// Now load the config which will create a new one with defaults
+			// We need to use the actual config package's functions
+			if err := config.Load(); err != nil {
+				return fmt.Errorf("failed to reset to defaults: %w", err)
+			}
+
+			fmt.Println("\n✓ Configuration has been reset to defaults!")
+			fmt.Println("\nYou can restore your previous configuration with:")
+			fmt.Printf("  cp %s %s\n", backupPath, configPath)
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation prompt")
+
+	return cmd
+}
+
+// refreshCommand refreshes configuration with new fields while preserving customizations
+func refreshCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "refresh",
+		Short: "Refresh configuration with new default fields",
+		Long: `Refresh the heimdall configuration to include any new fields from updates.
+		
+This command will:
+  - Load your current configuration
+  - Merge in any new default fields
+  - Preserve all your customizations
+  - Save the updated configuration
+
+This is useful after updating heimdall to ensure you have all new configuration options.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			configPath := os.ExpandEnv("$HOME/.config/heimdall/config.json")
+
+			// Check if config exists
+			if _, err := os.Stat(configPath); os.IsNotExist(err) {
+				fmt.Println("No configuration file found. Creating new configuration with defaults...")
+				// Just load the config which will create it with defaults
+				if err := config.Load(); err != nil {
+					return fmt.Errorf("failed to create configuration: %w", err)
+				}
+				fmt.Println("✓ Configuration created with defaults")
+				return nil
+			}
+
+			// Create a backup first
+			backupPath := configPath + ".refresh-backup"
+			currentData, err := os.ReadFile(configPath)
+			if err != nil {
+				return fmt.Errorf("failed to read current config: %w", err)
+			}
+
+			if err := os.WriteFile(backupPath, currentData, 0644); err != nil {
+				return fmt.Errorf("failed to create backup: %w", err)
+			}
+
+			fmt.Printf("✓ Current configuration backed up to: %s\n", backupPath)
+
+			// Load the config - this will automatically merge defaults with existing values
+			if err := config.Load(); err != nil {
+				return fmt.Errorf("failed to refresh configuration: %w", err)
+			}
+
+			// The Load() function already saves the merged config, but let's make sure
+			if err := config.Save(); err != nil {
+				return fmt.Errorf("failed to save refreshed configuration: %w", err)
+			}
+
+			// Check what was added
+			var oldConfig, newConfig map[string]interface{}
+			if err := json.Unmarshal(currentData, &oldConfig); err == nil {
+				if newData, err := os.ReadFile(configPath); err == nil {
+					if err := json.Unmarshal(newData, &newConfig); err == nil {
+						// Compare and show what was added
+						added := findNewFields(oldConfig, newConfig, "")
+						if len(added) > 0 {
+							fmt.Println("\n✅ New configuration fields added:")
+							for _, field := range added {
+								fmt.Printf("  - %s\n", field)
+							}
+						} else {
+							fmt.Println("\n✅ Configuration is already up to date")
+						}
+					}
+				}
+			}
+
+			fmt.Println("\n✓ Configuration has been refreshed with latest defaults!")
+			fmt.Println("Your customizations have been preserved.")
+
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+// findNewFields compares two config maps and returns fields that are in new but not in old
+func findNewFields(old, new map[string]interface{}, prefix string) []string {
+	var added []string
+
+	for key, newValue := range new {
+		fullKey := key
+		if prefix != "" {
+			fullKey = prefix + "." + key
+		}
+
+		oldValue, exists := old[key]
+		if !exists {
+			// This field is new
+			added = append(added, fullKey)
+		} else {
+			// Check nested objects
+			if newMap, ok := newValue.(map[string]interface{}); ok {
+				if oldMap, ok := oldValue.(map[string]interface{}); ok {
+					// Recursively check nested fields
+					nestedAdded := findNewFields(oldMap, newMap, fullKey)
+					added = append(added, nestedAdded...)
+				}
+			}
+		}
+	}
+
+	return added
 }
 
 // allCommand performs operations on all domains

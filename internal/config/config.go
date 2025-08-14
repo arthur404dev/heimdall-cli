@@ -32,14 +32,39 @@ type Config struct {
 
 // ThemeConfig represents theme configuration
 type ThemeConfig struct {
-	EnableTerm      bool `mapstructure:"enableTerm" json:"enableTerm" yaml:"enableTerm"`
-	EnableHypr      bool `mapstructure:"enableHypr" json:"enableHypr" yaml:"enableHypr"`
-	EnableDiscord   bool `mapstructure:"enableDiscord" json:"enableDiscord" yaml:"enableDiscord"`
-	EnableSpicetify bool `mapstructure:"enableSpicetify" json:"enableSpicetify" yaml:"enableSpicetify"`
-	EnableFuzzel    bool `mapstructure:"enableFuzzel" json:"enableFuzzel" yaml:"enableFuzzel"`
-	EnableBtop      bool `mapstructure:"enableBtop" json:"enableBtop" yaml:"enableBtop"`
-	EnableGtk       bool `mapstructure:"enableGtk" json:"enableGtk" yaml:"enableGtk"`
-	EnableQt        bool `mapstructure:"enableQt" json:"enableQt" yaml:"enableQt"`
+	EnableTerm      bool             `mapstructure:"enableTerm" json:"enableTerm" yaml:"enableTerm"`
+	EnableHypr      bool             `mapstructure:"enableHypr" json:"enableHypr" yaml:"enableHypr"`
+	EnableDiscord   bool             `mapstructure:"enableDiscord" json:"enableDiscord" yaml:"enableDiscord"`
+	EnableSpicetify bool             `mapstructure:"enableSpicetify" json:"enableSpicetify" yaml:"enableSpicetify"`
+	EnableFuzzel    bool             `mapstructure:"enableFuzzel" json:"enableFuzzel" yaml:"enableFuzzel"`
+	EnableBtop      bool             `mapstructure:"enableBtop" json:"enableBtop" yaml:"enableBtop"`
+	EnableGtk       bool             `mapstructure:"enableGtk" json:"enableGtk" yaml:"enableGtk"`
+	EnableQt        bool             `mapstructure:"enableQt" json:"enableQt" yaml:"enableQt"`
+	EnableKitty     bool             `mapstructure:"enableKitty" json:"enableKitty" yaml:"enableKitty"`
+	EnableAlacritty bool             `mapstructure:"enableAlacritty" json:"enableAlacritty" yaml:"enableAlacritty"`
+	EnableWezterm   bool             `mapstructure:"enableWezterm" json:"enableWezterm" yaml:"enableWezterm"`
+	Paths           ThemePathsConfig `mapstructure:"paths" json:"paths" yaml:"paths"`
+}
+
+// ThemePathsConfig represents custom paths for theme files
+type ThemePathsConfig struct {
+	Gtk3          string `mapstructure:"gtk3" json:"gtk3" yaml:"gtk3"`
+	Gtk4          string `mapstructure:"gtk4" json:"gtk4" yaml:"gtk4"`
+	Qt5           string `mapstructure:"qt5" json:"qt5" yaml:"qt5"`
+	Qt6           string `mapstructure:"qt6" json:"qt6" yaml:"qt6"`
+	Btop          string `mapstructure:"btop" json:"btop" yaml:"btop"`
+	Fuzzel        string `mapstructure:"fuzzel" json:"fuzzel" yaml:"fuzzel"`
+	Spicetify     string `mapstructure:"spicetify" json:"spicetify" yaml:"spicetify"`
+	Kitty         string `mapstructure:"kitty" json:"kitty" yaml:"kitty"`
+	Alacritty     string `mapstructure:"alacritty" json:"alacritty" yaml:"alacritty"`
+	Wezterm       string `mapstructure:"wezterm" json:"wezterm" yaml:"wezterm"`
+	Terminal      string `mapstructure:"terminal" json:"terminal" yaml:"terminal"`
+	Vesktop       string `mapstructure:"vesktop" json:"vesktop" yaml:"vesktop"`
+	Discord       string `mapstructure:"discord" json:"discord" yaml:"discord"`
+	DiscordCanary string `mapstructure:"discordCanary" json:"discordCanary" yaml:"discordCanary"`
+	Vencord       string `mapstructure:"vencord" json:"vencord" yaml:"vencord"`
+	Equicord      string `mapstructure:"equicord" json:"equicord" yaml:"equicord"`
+	BetterDiscord string `mapstructure:"betterDiscord" json:"betterDiscord" yaml:"betterDiscord"`
 }
 
 // ToggleConfig represents workspace toggle configuration
@@ -184,9 +209,11 @@ type ExternalTools struct {
 var (
 	// Global config instance
 	cfg *Config
+)
 
-	// Default configuration values
-	defaults = Config{
+// getDefaults returns the default configuration values
+func getDefaults() Config {
+	return Config{
 		Version: "0.2.0",
 		Theme: ThemeConfig{
 			EnableTerm:      true,
@@ -197,6 +224,28 @@ var (
 			EnableBtop:      true,
 			EnableGtk:       true,
 			EnableQt:        true,
+			EnableKitty:     true,
+			EnableAlacritty: false,
+			EnableWezterm:   false,
+			Paths: ThemePathsConfig{
+				Gtk3:          filepath.Join(paths.ConfigDir, "gtk-3.0", "colors.css"),                        // GTK uses CSS, colors.css makes sense
+				Gtk4:          filepath.Join(paths.ConfigDir, "gtk-4.0", "colors.css"),                        // GTK uses CSS, colors.css makes sense
+				Qt5:           filepath.Join(paths.ConfigDir, "qt5ct", "colors", "heimdall.conf"),             // Qt5ct expects files in colors/ dir
+				Qt6:           filepath.Join(paths.ConfigDir, "qt6ct", "colors", "heimdall.conf"),             // Qt6ct expects files in colors/ dir
+				Btop:          filepath.Join(paths.ConfigDir, "btop", "themes", "heimdall.theme"),             // btop expects .theme files in themes/ dir
+				Fuzzel:        filepath.Join(paths.ConfigDir, "fuzzel", "colors.ini"),                         // Fuzzel uses INI, colors.ini makes sense
+				Spicetify:     filepath.Join(paths.ConfigDir, "spicetify", "Themes", "heimdall", "color.ini"), // Spicetify expects this structure
+				Kitty:         filepath.Join(paths.ConfigDir, "kitty", "themes", "heimdall.conf"),             // Kitty can include from themes/ dir
+				Alacritty:     filepath.Join(paths.ConfigDir, "alacritty", "themes", "heimdall.toml"),         // Alacritty can import from themes/ dir
+				Wezterm:       filepath.Join(paths.ConfigDir, "wezterm", "colors", "heimdall.lua"),            // WezTerm color schemes go in colors/ dir
+				Terminal:      filepath.Join(paths.ConfigDir, "heimdall", "sequences.txt"),                    // Our own sequences file
+				Vesktop:       filepath.Join(paths.ConfigDir, "vesktop", "themes", "heimdall.css"),            // Discord clients use themes/ dir
+				Discord:       filepath.Join(paths.ConfigDir, "discord", "themes", "heimdall.css"),
+				DiscordCanary: filepath.Join(paths.ConfigDir, "discordcanary", "themes", "heimdall.css"),
+				Vencord:       filepath.Join(paths.ConfigDir, "Vencord", "themes", "heimdall.css"),
+				Equicord:      filepath.Join(paths.ConfigDir, "Equicord", "themes", "heimdall.css"),
+				BetterDiscord: filepath.Join(paths.ConfigDir, "BetterDiscord", "themes", "heimdall.theme.css"),
+			},
 		},
 		Shell: ShellConfig{
 			Command:    "qs",
@@ -306,11 +355,11 @@ var (
 			Gdbus:       "gdbus",
 		},
 	}
-)
+}
 
 // Load loads the configuration from file
 func Load() error {
-	// Set defaults
+	// Set defaults first - this ensures all fields have values
 	setDefaults()
 
 	// Set config type to JSON
@@ -328,8 +377,16 @@ func Load() error {
 		}
 	}
 
-	if paths.Exists(heimdallConfig) {
+	configExists := paths.Exists(heimdallConfig)
+
+	if configExists {
 		viper.SetConfigFile(heimdallConfig)
+		// Read existing config
+		if err := viper.ReadInConfig(); err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+				return fmt.Errorf("failed to read config: %w", err)
+			}
+		}
 	} else {
 		// Check for legacy Caelestia config
 		caelestiaConfig := filepath.Join(paths.CaelestiaConfigDir, "cli.json")
@@ -339,26 +396,24 @@ func Load() error {
 				return fmt.Errorf("failed to migrate Caelestia config: %w", err)
 			}
 			viper.SetConfigFile(heimdallConfig)
+			configExists = true
 		} else {
-			// No config found, create default
+			// No config found, will create with defaults
 			viper.SetConfigFile(heimdallConfig)
-			if err := SaveDefaults(); err != nil {
-				return fmt.Errorf("failed to save default config: %w", err)
-			}
 		}
 	}
 
-	// Read config
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return fmt.Errorf("failed to read config: %w", err)
-		}
-	}
-
-	// Unmarshal into struct
+	// Unmarshal into struct - this merges defaults with existing config
 	cfg = &Config{}
 	if err := viper.Unmarshal(cfg); err != nil {
 		return fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// IMPORTANT: Always save the config back to ensure new fields are persisted
+	// This handles the case where we add new configuration fields in updates
+	if err := Save(); err != nil {
+		// Don't fail if we can't save, just log a warning
+		fmt.Fprintf(os.Stderr, "Warning: Failed to update config file with new defaults: %v\n", err)
 	}
 
 	return nil
@@ -385,12 +440,35 @@ func Save() error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
+	// IMPORTANT: Re-set all values in viper from our struct to ensure nested fields are saved
+	// This is necessary because viper might not track all nested struct changes
+	viper.Set("version", cfg.Version)
+	viper.Set("theme", cfg.Theme)
+	viper.Set("shell", cfg.Shell)
+	viper.Set("scheme", cfg.Scheme)
+	viper.Set("wallpaper", cfg.Wallpaper)
+	viper.Set("screenshot", cfg.Screenshot)
+	viper.Set("recording", cfg.Recording)
+	viper.Set("clipboard", cfg.Clipboard)
+	viper.Set("emoji", cfg.Emoji)
+	viper.Set("pip", cfg.PIP)
+	viper.Set("notification", cfg.Notification)
+	viper.Set("paths", cfg.Paths)
+	viper.Set("network", cfg.Network)
+	viper.Set("external", cfg.External)
+
 	// Set config type to JSON
 	viper.SetConfigType("json")
 
-	// Write config
-	if err := viper.WriteConfigAs(configPath); err != nil {
-		return fmt.Errorf("failed to write config: %w", err)
+	// Write config - use WriteConfig if file exists, SafeWriteConfig if it doesn't
+	if paths.Exists(configPath) {
+		if err := viper.WriteConfig(); err != nil {
+			return fmt.Errorf("failed to write config: %w", err)
+		}
+	} else {
+		if err := viper.WriteConfigAs(configPath); err != nil {
+			return fmt.Errorf("failed to write config: %w", err)
+		}
 	}
 
 	return nil
@@ -423,6 +501,7 @@ func SaveDefaults() error {
 
 // setDefaults sets default values in Viper
 func setDefaults() {
+	defaults := getDefaults()
 	viper.SetDefault("version", defaults.Version)
 	viper.SetDefault("theme", defaults.Theme)
 	viper.SetDefault("shell", defaults.Shell)

@@ -1,0 +1,142 @@
+{
+  "version": "0.2.0",
+  "theme": {
+    "enableTerm": true,
+    "enableHypr": true,
+    "enableDiscord": true,
+    "enableSpicetify": true,
+    "enableFuzzel": true,
+    "enableBtop": true,
+    "enableGtk": true,
+    "enableQt": true,
+    "enableKitty": true,
+    "enableAlacritty": false,
+    "enableWezterm": false,
+    "paths": {
+      "gtk3": "~/.config/gtk-3.0/colors.css",
+      "gtk4": "~/.config/gtk-4.0/colors.css",
+      "qt5": "~/.config/qt5ct/colors/heimdall.conf",
+      "qt6": "~/.config/qt6ct/colors/heimdall.conf",
+      "btop": "~/.config/btop/themes/heimdall.theme",
+      "fuzzel": "~/.config/fuzzel/colors.ini",
+      "spicetify": "~/.config/spicetify/Themes/heimdall/color.ini",
+      "kitty": "~/.config/kitty/themes/heimdall.conf",
+      "alacritty": "~/.config/alacritty/themes/heimdall.toml",
+      "wezterm": "~/.config/wezterm/colors/heimdall.lua",
+      "terminal": "~/.config/heimdall/sequences.txt",
+      "vesktop": "~/.config/vesktop/themes/heimdall.css",
+      "discord": "~/.config/discord/themes/heimdall.css",
+      "discordCanary": "~/.config/discordcanary/themes/heimdall.css",
+      "vencord": "~/.config/Vencord/themes/heimdall.css",
+      "equicord": "~/.config/Equicord/themes/heimdall.css",
+      "betterDiscord": "~/.config/BetterDiscord/themes/heimdall.theme.css"
+    }
+  },
+  "shell": {
+    "command": "qs",
+    "args": ["-c", "heimdall", "-n"],
+    "daemon_port": 9999,
+    "log_file": "shell.log",
+    "pid_file": "shell.pid",
+    "ipc_timeout": 5
+  },
+  "scheme": {
+    "default": "rosepine",
+    "auto_mode": true,
+    "material_you": true
+  },
+  "wallpaper": {
+    "directory": "~/Pictures/Wallpapers",
+    "filter": true,
+    "threshold": 0.8,
+    "smart_mode": true,
+    "extensions": [".jpg", ".jpeg", ".png", ".webp"]
+  },
+  "screenshot": {
+    "directory": "~/Pictures/Screenshots",
+    "file_format": "png",
+    "file_name_pattern": "screenshot_%Y%m%d_%H%M%S",
+    "copy_to_clipboard": true,
+    "open_with_swappy": true,
+    "show_notification": true,
+    "notification_timeout": 3,
+    "freeze_file_name": "freeze.png"
+  },
+  "recording": {
+    "directory": "~/Videos/Recordings",
+    "file_format": "mp4",
+    "file_name_pattern": "recording_%Y%m%d_%H%M%S",
+    "temp_file_name": "recording.mp4",
+    "show_notification": true,
+    "audio_source": "auto"
+  },
+  "clipboard": {
+    "max_entries": 100,
+    "fuzzel_prompt": "Clipboard> ",
+    "fuzzel_args": ["--dmenu", "--width", "50", "--lines", "20"],
+    "preview_length": 50,
+    "delete_on_select": false
+  },
+  "emoji": {
+    "data_directory": "~/.local/share/heimdall/emoji",
+    "sources": ["emoji.json"],
+    "fuzzel_prompt": "Emoji> ",
+    "fuzzel_args": ["--dmenu", "--prompt"],
+    "copy_to_clipboard": true,
+    "type_directly": false,
+    "download_timeout": 30
+  },
+  "pip": {
+    "enabled": true,
+    "pid_file": "pip.pid",
+    "window_size": "25%",
+    "window_position": "bottom-right",
+    "video_apps": [
+      "mpv", "vlc", "firefox", "chromium", "chrome",
+      "brave", "youtube", "netflix", "twitch", "spotify"
+    ],
+    "video_keywords": [
+      "youtube", "netflix", "twitch", "vimeo",
+      "- playing", "▶", "►", "video", "stream"
+    ],
+    "pin_windows": true,
+    "always_on_top": true
+  },
+  "notification": {
+    "enabled": true,
+    "provider": "auto",
+    "default_timeout": 5,
+    "app_name": "heimdall",
+    "default_urgency": "normal"
+  },
+  "paths": {
+    "templates": "",
+    "schemes": "",
+    "state_dir": "",
+    "cache_dir": "",
+    "data_dir": ""
+  },
+  "network": {
+    "ipc_timeout": 5,
+    "hypr_ipc_timeout": 5
+  },
+  "external_tools": {
+    "grim": "grim",
+    "slurp": "slurp",
+    "swappy": "swappy",
+    "wl_clipboard": "wl-copy",
+    "wl_screenrec": "wl-screenrec",
+    "cliphist": "cliphist",
+    "fuzzel": "fuzzel",
+    "dart_sass": "sass",
+    "libnotify": "notify-send",
+    "dunstify": "dunstify",
+    "qs": "qs",
+    "app2unit": "app2unit",
+    "xclip": "xclip",
+    "pactl": "pactl",
+    "pidof": "pidof",
+    "pkill": "pkill",
+    "gdbus": "gdbus"
+  }
+}

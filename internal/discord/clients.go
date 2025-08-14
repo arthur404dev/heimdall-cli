@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/arthur404dev/heimdall-cli/internal/config"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 )
 
@@ -29,49 +30,77 @@ type ClientManager struct {
 func NewClientManager() *ClientManager {
 	homeDir, _ := os.UserHomeDir()
 
-	clients := []Client{
-		{
-			Name:         "Discord Official",
-			ConfigPath:   filepath.Join(homeDir, ".config", "discord"),
-			ThemePath:    filepath.Join(homeDir, ".config", "discord", "settings.json"),
-			FileFormat:   "json",
-			TemplateType: "settings",
-		},
-		{
-			Name:         "Vesktop",
-			ConfigPath:   filepath.Join(homeDir, ".config", "vesktop"),
-			ThemePath:    filepath.Join(homeDir, ".config", "vesktop", "themes", "heimdall.css"),
-			FileFormat:   "css",
-			TemplateType: "css",
-		},
-		{
-			Name:         "Vencord",
-			ConfigPath:   filepath.Join(homeDir, ".config", "Vencord"),
-			ThemePath:    filepath.Join(homeDir, ".config", "Vencord", "themes", "heimdall.css"),
-			FileFormat:   "css",
-			TemplateType: "css",
-		},
-		{
-			Name:         "BetterDiscord",
-			ConfigPath:   filepath.Join(homeDir, ".config", "BetterDiscord"),
-			ThemePath:    filepath.Join(homeDir, ".config", "BetterDiscord", "themes", "heimdall.theme.css"),
-			FileFormat:   "css",
-			TemplateType: "betterdiscord",
-		},
-		{
-			Name:         "OpenAsar",
-			ConfigPath:   filepath.Join(homeDir, ".config", "discord"),
-			ThemePath:    filepath.Join(homeDir, ".config", "discord", "themes", "heimdall.css"),
-			FileFormat:   "css",
-			TemplateType: "css",
-		},
-		{
-			Name:         "Armcord",
-			ConfigPath:   filepath.Join(homeDir, ".config", "armcord"),
-			ThemePath:    filepath.Join(homeDir, ".config", "armcord", "themes", "heimdall.css"),
-			FileFormat:   "css",
-			TemplateType: "css",
-		},
+	// Get configuration for Discord paths
+	cfg := config.Get()
+
+	// Build clients list from configuration
+	clients := []Client{}
+
+	if cfg != nil && cfg.Theme.Paths.Discord != "" {
+		// Use configured paths
+		clients = []Client{
+			{
+				Name:         "Discord Official",
+				ConfigPath:   filepath.Dir(cfg.Theme.Paths.Discord),
+				ThemePath:    cfg.Theme.Paths.Discord,
+				FileFormat:   "css",
+				TemplateType: "css",
+			},
+			{
+				Name:         "Vesktop",
+				ConfigPath:   filepath.Dir(cfg.Theme.Paths.Vesktop),
+				ThemePath:    cfg.Theme.Paths.Vesktop,
+				FileFormat:   "css",
+				TemplateType: "css",
+			},
+			{
+				Name:         "Vencord",
+				ConfigPath:   filepath.Dir(cfg.Theme.Paths.Vencord),
+				ThemePath:    cfg.Theme.Paths.Vencord,
+				FileFormat:   "css",
+				TemplateType: "css",
+			},
+			{
+				Name:         "BetterDiscord",
+				ConfigPath:   filepath.Dir(cfg.Theme.Paths.BetterDiscord),
+				ThemePath:    cfg.Theme.Paths.BetterDiscord,
+				FileFormat:   "css",
+				TemplateType: "betterdiscord",
+			},
+			{
+				Name:         "Discord Canary",
+				ConfigPath:   filepath.Dir(cfg.Theme.Paths.DiscordCanary),
+				ThemePath:    cfg.Theme.Paths.DiscordCanary,
+				FileFormat:   "css",
+				TemplateType: "css",
+			},
+			{
+				Name:         "Equicord",
+				ConfigPath:   filepath.Dir(cfg.Theme.Paths.Equicord),
+				ThemePath:    cfg.Theme.Paths.Equicord,
+				FileFormat:   "css",
+				TemplateType: "css",
+			},
+		}
+	} else {
+		// This shouldn't happen if config is properly loaded with defaults
+		// But provide fallback just in case
+		clients = []Client{
+			{
+				Name:         "Discord Official",
+				ConfigPath:   filepath.Join(homeDir, ".config", "discord"),
+				ThemePath:    filepath.Join(homeDir, ".config", "discord", "themes", "heimdall.css"),
+				FileFormat:   "css",
+				TemplateType: "css",
+			},
+			{
+				Name:         "Vesktop",
+				ConfigPath:   filepath.Join(homeDir, ".config", "vesktop"),
+				ThemePath:    filepath.Join(homeDir, ".config", "vesktop", "themes", "heimdall.css"),
+				FileFormat:   "css",
+				TemplateType: "css",
+			},
+		}
 	}
 
 	return &ClientManager{

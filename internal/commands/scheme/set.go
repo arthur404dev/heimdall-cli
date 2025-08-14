@@ -217,11 +217,14 @@ func applyThemeWithOptions(s *scheme.Scheme, selectedApps []string) error {
 			"qt":        true,
 			"spicetify": true,
 			"terminal":  true,
+			"kitty":     true,
+			"alacritty": true,
+			"wezterm":   true,
 		}
 
 		for _, app := range selectedApps {
 			if !validApps[app] {
-				return fmt.Errorf("invalid app: %s (valid apps: btop, discord, fuzzel, gtk, qt, spicetify, terminal)", app)
+				return fmt.Errorf("invalid app: %s (valid apps: btop, discord, fuzzel, gtk, qt, spicetify, terminal, kitty, alacritty, wezterm)", app)
 			}
 			apps = append(apps, app)
 		}
@@ -244,6 +247,15 @@ func applyThemeWithOptions(s *scheme.Scheme, selectedApps []string) error {
 		}
 		if cfg.Theme.EnableSpicetify {
 			apps = append(apps, "spicetify")
+		}
+		if cfg.Theme.EnableKitty {
+			apps = append(apps, "kitty")
+		}
+		if cfg.Theme.EnableAlacritty {
+			apps = append(apps, "alacritty")
+		}
+		if cfg.Theme.EnableWezterm {
+			apps = append(apps, "wezterm")
 		}
 		// Terminal sequences are always applied unless explicitly disabled
 		apps = append(apps, "terminal")
@@ -305,6 +317,9 @@ func performDryRun(s *scheme.Scheme, selectedApps []string) error {
 			"qt":        true,
 			"spicetify": true,
 			"terminal":  true,
+			"kitty":     true,
+			"alacritty": true,
+			"wezterm":   true,
 		}
 
 		for _, app := range selectedApps {
@@ -333,35 +348,52 @@ func performDryRun(s *scheme.Scheme, selectedApps []string) error {
 		if cfg.Theme.EnableSpicetify {
 			apps = append(apps, "spicetify")
 		}
+		if cfg.Theme.EnableKitty {
+			apps = append(apps, "kitty")
+		}
+		if cfg.Theme.EnableAlacritty {
+			apps = append(apps, "alacritty")
+		}
+		if cfg.Theme.EnableWezterm {
+			apps = append(apps, "wezterm")
+		}
 		apps = append(apps, "terminal")
 	}
+
+	// Create an applier instance to use its centralized path logic
+	applier := theme.NewApplier(paths.ConfigDir, paths.DataDir)
 
 	// Show what files would be created/modified
 	for _, app := range apps {
 		switch app {
-		case "btop":
-			fmt.Printf("  - %s/btop/themes/heimdall.theme\n", paths.ConfigDir)
+		case "gtk":
+			// GTK has two separate files
+			fmt.Printf("  - %s\n", applier.GetOutputPath("gtk3"))
+			fmt.Printf("  - %s\n", applier.GetOutputPath("gtk4"))
+		case "qt":
+			// Qt has two separate files
+			fmt.Printf("  - %s\n", applier.GetOutputPath("qt5"))
+			fmt.Printf("  - %s\n", applier.GetOutputPath("qt6"))
 		case "discord":
 			// Discord has multiple clients
-			fmt.Printf("  - %s/vesktop/themes/heimdall.css (if Vesktop installed)\n", paths.ConfigDir)
-			fmt.Printf("  - %s/discord/themes/heimdall.css (if Discord installed)\n", paths.ConfigDir)
-			fmt.Printf("  - %s/discordcanary/themes/heimdall.css (if Discord Canary installed)\n", paths.ConfigDir)
-			fmt.Printf("  - %s/Vencord/themes/heimdall.css (if Vencord installed)\n", paths.ConfigDir)
-			fmt.Printf("  - %s/Equicord/themes/heimdall.css (if Equicord installed)\n", paths.ConfigDir)
-			fmt.Printf("  - %s/BetterDiscord/themes/heimdall.theme.css (if BetterDiscord installed)\n", paths.ConfigDir)
-		case "fuzzel":
-			fmt.Printf("  - %s/fuzzel/fuzzel.ini\n", paths.ConfigDir)
-		case "gtk":
-			fmt.Printf("  - %s/gtk-3.0/gtk.css\n", paths.ConfigDir)
-			fmt.Printf("  - %s/gtk-4.0/gtk.css\n", paths.ConfigDir)
-		case "qt":
-			fmt.Printf("  - %s/qt5ct/colors/heimdall.conf\n", paths.ConfigDir)
-			fmt.Printf("  - %s/qt6ct/colors/heimdall.conf\n", paths.ConfigDir)
-		case "spicetify":
-			fmt.Printf("  - %s/spicetify/Themes/heimdall/color.ini\n", paths.ConfigDir)
+			discordPaths := applier.GetDiscordPaths()
+			for client, path := range discordPaths {
+				clientName := strings.Title(client)
+				if client == "betterdiscord" {
+					clientName = "BetterDiscord"
+				} else if client == "discordcanary" {
+					clientName = "Discord Canary"
+				}
+				fmt.Printf("  - %s (if %s installed)\n", path, clientName)
+			}
 		case "terminal":
-			fmt.Printf("  - %s/sequences.txt\n", paths.ConfigDir)
+			outputPath := applier.GetOutputPath(app)
+			fmt.Printf("  - %s\n", outputPath)
 			fmt.Println("  - Terminal sequences would be applied to active terminals")
+		default:
+			// All other apps have a single output path
+			outputPath := applier.GetOutputPath(app)
+			fmt.Printf("  - %s\n", outputPath)
 		}
 	}
 

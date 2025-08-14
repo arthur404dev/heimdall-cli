@@ -20,23 +20,41 @@ func (sb *SequenceBuilder) GenerateSequences(colours map[string]string) ([]strin
 
 	// Generate sequences for special colors first (using OSC 10, 11, 12)
 	// These are more universally supported than the extended indices
+	// Try both "foreground" and "text" for compatibility
 	if fg, exists := colours["foreground"]; exists {
 		sequences = append(sequences, sb.buildOSCSequence(10, fg)) // OSC 10 - foreground
+	} else if fg, exists := colours["text"]; exists {
+		sequences = append(sequences, sb.buildOSCSequence(10, fg)) // OSC 10 - foreground
 	}
+
 	if bg, exists := colours["background"]; exists {
 		sequences = append(sequences, sb.buildOSCSequence(11, bg)) // OSC 11 - background
 	}
+
 	if cursor, exists := colours["cursor"]; exists {
+		sequences = append(sequences, sb.buildOSCSequence(12, cursor)) // OSC 12 - cursor
+	} else if cursor, exists := colours["text"]; exists {
+		// Use text color for cursor if no explicit cursor color
 		sequences = append(sequences, sb.buildOSCSequence(12, cursor)) // OSC 12 - cursor
 	}
 
-	// Generate sequences for 16 standard colors (colour0-colour15)
+	// Generate sequences for 16 standard colors
+	// Try both "colour" and "term" prefixes for compatibility
 	for i := 0; i < 16; i++ {
 		colourKey := fmt.Sprintf("colour%d", i)
-		if hexValue, exists := colours[colourKey]; exists {
+		termKey := fmt.Sprintf("term%d", i)
+
+		var hexValue string
+		var exists bool
+
+		if hexValue, exists = colours[colourKey]; !exists {
+			hexValue, exists = colours[termKey]
+		}
+
+		if exists {
 			sequence, err := sb.buildColorSequence(i, hexValue)
 			if err != nil {
-				return nil, fmt.Errorf("failed to build sequence for %s: %w", colourKey, err)
+				return nil, fmt.Errorf("failed to build sequence for color %d: %w", i, err)
 			}
 			sequences = append(sequences, sequence)
 		}
@@ -50,8 +68,8 @@ func (sb *SequenceBuilder) buildOSCSequence(code int, hexColor string) string {
 	// Remove # prefix if present
 	hexColor = strings.TrimPrefix(hexColor, "#")
 
-	// Format: printf '\033]10;#cdd6f4\007' for foreground
-	return fmt.Sprintf("printf '\\033]%d;#%s\\007'", code, hexColor)
+	// Return raw escape sequence (without printf wrapper for direct terminal application)
+	return fmt.Sprintf("\\033]%d;#%s\\007", code, hexColor)
 }
 
 // buildColorSequence creates a single ANSI escape sequence for a color
@@ -64,8 +82,8 @@ func (sb *SequenceBuilder) buildColorSequence(index int, hexColor string) (strin
 		return "", fmt.Errorf("invalid hex color format: %s (expected 6 characters)", hexColor)
 	}
 
-	// Format: printf '\033]4;0;#45475a\007' for color index 0
-	sequence := fmt.Sprintf("printf '\\033]4;%d;#%s\\007'", index, hexColor)
+	// Return raw escape sequence (without printf wrapper for direct terminal application)
+	sequence := fmt.Sprintf("\\033]4;%d;#%s\\007", index, hexColor)
 
 	return sequence, nil
 }
@@ -163,7 +181,8 @@ func (sb *SequenceBuilder) FormatSequencesForShell(sequences []string, schemeNam
 	builder.WriteString("# Special colors\n")
 	for i, sequence := range sequences {
 		if i < 3 { // First 3 are special colors (foreground, background, cursor)
-			builder.WriteString(sequence + "\n")
+			// Wrap raw sequences in printf for shell execution
+			builder.WriteString(fmt.Sprintf("printf '%s'\n", sequence))
 		}
 	}
 
@@ -176,7 +195,8 @@ func (sb *SequenceBuilder) FormatSequencesForShell(sequences []string, schemeNam
 		}
 
 		for i := 3; i < len(sequences) && i-3 < len(colorNames); i++ {
-			builder.WriteString(fmt.Sprintf("%s  # %s\n", sequences[i], colorNames[i-3]))
+			// Wrap raw sequences in printf for shell execution
+			builder.WriteString(fmt.Sprintf("printf '%s'  # %s\n", sequences[i], colorNames[i-3]))
 		}
 	}
 
