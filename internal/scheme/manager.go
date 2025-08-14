@@ -366,8 +366,27 @@ func (m *Manager) LoadScheme(name, flavour, mode string) (*Scheme, error) {
 	}
 
 	// If not found on disk, try loading from embedded assets
-	embeddedPath := fmt.Sprintf("%s/%s/%s.txt", name, flavour, mode)
+	// Try JSON format first
+	embeddedPath := fmt.Sprintf("%s/%s/%s.json", name, flavour, mode)
 	embeddedData, err := schemes.Content.ReadFile(embeddedPath)
+	if err == nil {
+		// Parse embedded JSON format
+		var scheme Scheme
+		if err := json.Unmarshal(embeddedData, &scheme); err != nil {
+			return nil, fmt.Errorf("failed to parse embedded scheme JSON: %w", err)
+		}
+
+		// Ensure colors don't have # prefix in storage (add it when needed)
+		for key, value := range scheme.Colours {
+			scheme.Colours[key] = strings.TrimPrefix(value, "#")
+		}
+
+		return &scheme, nil
+	}
+
+	// Fallback to .txt format for backward compatibility
+	embeddedPath = fmt.Sprintf("%s/%s/%s.txt", name, flavour, mode)
+	embeddedData, err = schemes.Content.ReadFile(embeddedPath)
 	if err == nil {
 		// Parse embedded .txt format (space-separated key-value pairs)
 		scheme := &Scheme{

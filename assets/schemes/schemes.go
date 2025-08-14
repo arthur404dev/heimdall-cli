@@ -4,12 +4,12 @@ import (
 	"embed"
 )
 
-// Content embeds all Material You scheme files in .txt format
+// Content embeds all Material You scheme files in JSON format
 //
-//go:embed catppuccin/*/*.txt
-//go:embed gruvbox/*/*.txt
-//go:embed rosepine/*/*.txt
-//go:embed onedark/*/*.txt
-//go:embed oldworld/*/*.txt
-//go:embed shadotheme/*/*.txt
+//go:embed catppuccin/*/*.json
+//go:embed gruvbox/*/*.json
+//go:embed rosepine/*/*.json
+//go:embed onedark/*/*.json
+//go:embed oldworld/*/*.json
+//go:embed shadotheme/*/*.json
 var Content embed.FS
