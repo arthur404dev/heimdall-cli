@@ -7,6 +7,7 @@ import (
 	"github.com/arthur404dev/heimdall-cli/internal/commands/clipboard"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/config"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/emoji"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/idle"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/pip"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/record"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/scheme"
@@ -113,6 +114,9 @@ func addCommands() {
 
 	// Add pip command
 	rootCmd.AddCommand(pip.Command())
+
+	// Add idle command
+	rootCmd.AddCommand(idle.Command())
 }
 
 // initConfig reads in config file and ENV variables if set.
