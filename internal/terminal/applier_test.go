@@ -158,7 +158,7 @@ func TestApplyToTerminals(t *testing.T) {
 	}
 
 	// This should not fail even if no terminals are found
-	err := applier.ApplyToTerminals(colours)
+	err := applier.ApplyToTerminals(colours, "test-scheme")
 	if err != nil {
 		t.Errorf("ApplyToTerminals() returned error: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestApplySequencesWithFallback(t *testing.T) {
 	}
 
 	// This should never fail due to fallback behavior
-	err := applier.ApplySequencesWithFallback(colours)
+	err := applier.ApplySequencesWithFallback(colours, "test-scheme")
 	if err != nil {
 		t.Errorf("ApplySequencesWithFallback() returned error: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestApplyToTerminalsWithInvalidColors(t *testing.T) {
 		"colour1": "gggggg",
 	}
 
-	err := applier.ApplyToTerminals(colours)
+	err := applier.ApplyToTerminals(colours, "test-scheme")
 	if err == nil {
 		t.Error("ApplyToTerminals() should have failed with invalid colors")
 	}
@@ -270,6 +270,6 @@ func BenchmarkApplyToTerminals(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		_ = applier.ApplyToTerminals(colours)
+		_ = applier.ApplyToTerminals(colours, "test-scheme")
 	}
 }

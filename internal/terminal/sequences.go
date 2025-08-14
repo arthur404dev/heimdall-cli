@@ -14,9 +14,21 @@ func NewSequenceBuilder() *SequenceBuilder {
 }
 
 // GenerateSequences creates ANSI escape sequences for all colors
-// Format: \033]4;0;rgb:1a/1b/26\033\\
+// Format: OSC sequences for terminal color configuration
 func (sb *SequenceBuilder) GenerateSequences(colours map[string]string) ([]string, error) {
 	var sequences []string
+
+	// Generate sequences for special colors first (using OSC 10, 11, 12)
+	// These are more universally supported than the extended indices
+	if fg, exists := colours["foreground"]; exists {
+		sequences = append(sequences, sb.buildOSCSequence(10, fg)) // OSC 10 - foreground
+	}
+	if bg, exists := colours["background"]; exists {
+		sequences = append(sequences, sb.buildOSCSequence(11, bg)) // OSC 11 - background
+	}
+	if cursor, exists := colours["cursor"]; exists {
+		sequences = append(sequences, sb.buildOSCSequence(12, cursor)) // OSC 12 - cursor
+	}
 
 	// Generate sequences for 16 standard colors (colour0-colour15)
 	for i := 0; i < 16; i++ {
@@ -30,24 +42,16 @@ func (sb *SequenceBuilder) GenerateSequences(colours map[string]string) ([]strin
 		}
 	}
 
-	// Generate sequences for special colors
-	specialColors := map[string]int{
-		"background": 256, // Background color
-		"foreground": 257, // Foreground color
-		"cursor":     258, // Cursor color
-	}
-
-	for colorName, colorIndex := range specialColors {
-		if hexValue, exists := colours[colorName]; exists {
-			sequence, err := sb.buildColorSequence(colorIndex, hexValue)
-			if err != nil {
-				return nil, fmt.Errorf("failed to build sequence for %s: %w", colorName, err)
-			}
-			sequences = append(sequences, sequence)
-		}
-	}
-
 	return sequences, nil
+}
+
+// buildOSCSequence creates an OSC sequence for special colors
+func (sb *SequenceBuilder) buildOSCSequence(code int, hexColor string) string {
+	// Remove # prefix if present
+	hexColor = strings.TrimPrefix(hexColor, "#")
+
+	// Format: printf '\033]10;#cdd6f4\007' for foreground
+	return fmt.Sprintf("printf '\\033]%d;#%s\\007'", code, hexColor)
 }
 
 // buildColorSequence creates a single ANSI escape sequence for a color
@@ -60,14 +64,8 @@ func (sb *SequenceBuilder) buildColorSequence(index int, hexColor string) (strin
 		return "", fmt.Errorf("invalid hex color format: %s (expected 6 characters)", hexColor)
 	}
 
-	// Parse RGB components
-	r, g, b, err := sb.parseHexColor(hexColor)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse hex color %s: %w", hexColor, err)
-	}
-
-	// Build ANSI sequence: \033]4;index;rgb:rr/gg/bb\033\\
-	sequence := fmt.Sprintf("\\033]4;%d;rgb:%02x/%02x/%02x\\033\\\\", index, r, g, b)
+	// Format: printf '\033]4;0;#45475a\007' for color index 0
+	sequence := fmt.Sprintf("printf '\\033]4;%d;#%s\\007'", index, hexColor)
 
 	return sequence, nil
 }
@@ -153,19 +151,33 @@ func (sb *SequenceBuilder) ValidateSequenceFormat(sequence string) error {
 }
 
 // FormatSequencesForShell formats sequences for shell sourcing
-func (sb *SequenceBuilder) FormatSequencesForShell(sequences []string) string {
+func (sb *SequenceBuilder) FormatSequencesForShell(sequences []string, schemeName string) string {
 	var builder strings.Builder
 
 	builder.WriteString("#!/bin/bash\n")
 	builder.WriteString("# Heimdall Terminal Color Sequences\n")
+	builder.WriteString(fmt.Sprintf("# Scheme: %s\n", schemeName))
 	builder.WriteString("# Generated automatically - source this file to apply colors\n\n")
 
-	for _, sequence := range sequences {
-		// Convert escape sequences to actual escape characters for shell
-		shellSequence := strings.ReplaceAll(sequence, "\\033", "\033")
-		shellSequence = strings.ReplaceAll(shellSequence, "\\\\", "\\")
+	// Add color comments for clarity
+	builder.WriteString("# Special colors\n")
+	for i, sequence := range sequences {
+		if i < 3 { // First 3 are special colors (foreground, background, cursor)
+			builder.WriteString(sequence + "\n")
+		}
+	}
 
-		builder.WriteString(fmt.Sprintf("printf '%s'\n", shellSequence))
+	if len(sequences) > 3 {
+		builder.WriteString("\n# Standard colors (0-15)\n")
+		colorNames := []string{
+			"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+			"bright black", "bright red", "bright green", "bright yellow",
+			"bright blue", "bright magenta", "bright cyan", "bright white",
+		}
+
+		for i := 3; i < len(sequences) && i-3 < len(colorNames); i++ {
+			builder.WriteString(fmt.Sprintf("%s  # %s\n", sequences[i], colorNames[i-3]))
+		}
 	}
 
 	builder.WriteString("\n# End of sequences\n")

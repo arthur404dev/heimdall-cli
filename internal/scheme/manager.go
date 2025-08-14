@@ -62,21 +62,84 @@ func (m *Manager) GetCurrent() (*Scheme, error) {
 	return &scheme, nil
 }
 
-// SetScheme sets the active scheme
+// SetScheme sets the active scheme with triple-write for QuickShell integration
 func (m *Manager) SetScheme(scheme *Scheme) error {
-	statePath := filepath.Join(m.stateDir, "scheme.json")
+	// Prepare Heimdall format data (with # prefix on colors)
+	heimdallScheme := &Scheme{
+		Name:    scheme.Name,
+		Flavour: scheme.Flavour,
+		Mode:    scheme.Mode,
+		Variant: scheme.Variant,
+		Colours: scheme.Colours, // Already has # prefix
+	}
 
-	// Ensure state directory exists
+	// 1. Primary write to Heimdall config location
+	configPath := filepath.Join(paths.ConfigDir, "scheme.json")
+	if err := paths.EnsureDir(paths.ConfigDir); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+	if err := paths.AtomicWriteJSON(configPath, heimdallScheme); err != nil {
+		return fmt.Errorf("failed to write config scheme: %w", err)
+	}
+
+	// 2. Secondary write to Heimdall state location (matching Caelestia pattern)
+	statePath := filepath.Join(m.stateDir, "scheme.json")
 	if err := paths.EnsureDir(m.stateDir); err != nil {
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
+	if err := paths.AtomicWriteJSON(statePath, heimdallScheme); err != nil {
+		return fmt.Errorf("failed to write state scheme: %w", err)
+	}
 
-	// Write scheme directly using atomic write
-	if err := paths.AtomicWriteJSON(statePath, scheme); err != nil {
-		return fmt.Errorf("failed to write scheme state: %w", err)
+	// 3. CRITICAL: QuickShell-specific format (no # prefix, "colours" key)
+	// This bridges the gap that Caelestia missed!
+	quickshellScheme := m.prepareQuickShellFormat(scheme)
+	quickshellDir := filepath.Join(os.Getenv("HOME"), ".local", "state", "quickshell", "user", "generated")
+
+	// Create QuickShell directory if it doesn't exist
+	if err := os.MkdirAll(quickshellDir, 0755); err != nil {
+		// Log warning but don't fail - QuickShell might not be installed
+		fmt.Fprintf(os.Stderr, "Warning: Failed to create QuickShell directory: %v\n", err)
+		return nil
+	}
+
+	quickshellPath := filepath.Join(quickshellDir, "scheme.json")
+	if err := paths.AtomicWriteJSON(quickshellPath, quickshellScheme); err != nil {
+		// Log warning but don't fail the primary operation
+		fmt.Fprintf(os.Stderr, "Warning: Failed to write QuickShell colors: %v\n", err)
+	} else {
+		// Log success for QuickShell integration
+		fmt.Fprintf(os.Stderr, "Info: Updated QuickShell colors (bridging Caelestia gap) at %s\n", quickshellPath)
 	}
 
 	return nil
+}
+
+// prepareQuickShellFormat converts scheme to QuickShell's expected format
+func (m *Manager) prepareQuickShellFormat(scheme *Scheme) map[string]interface{} {
+	// Strip # prefix from all colors for QuickShell
+	colours := make(map[string]string)
+	for key, value := range scheme.Colours {
+		colours[key] = strings.TrimPrefix(value, "#")
+	}
+
+	// QuickShell also expects special colors
+	special := make(map[string]string)
+	if cursor, ok := scheme.Colours["cursor"]; ok {
+		special["cursor"] = strings.TrimPrefix(cursor, "#")
+	}
+	if cursorText, ok := scheme.Colours["cursor_text"]; ok {
+		special["cursor_text"] = strings.TrimPrefix(cursorText, "#")
+	}
+
+	return map[string]interface{}{
+		"name":    scheme.Name,
+		"flavour": scheme.Flavour,
+		"mode":    scheme.Mode,
+		"variant": scheme.Variant,
+		"colours": colours, // Note: British spelling for QuickShell
+		"special": special,
+	}
 }
 
 // ListSchemes returns available scheme names from the schemes directory and embedded assets

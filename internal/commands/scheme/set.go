@@ -3,6 +3,7 @@ package scheme
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -26,6 +27,8 @@ func setCommand() *cobra.Command {
 		setVariant   string
 		randomScheme bool
 		enableNotify bool
+		apps         string
+		dryRun       bool
 	)
 
 	cmd := &cobra.Command{
@@ -51,14 +54,23 @@ Examples:
 
 			var schemeName, flavour, mode string
 
+			// Parse apps list if provided
+			var selectedApps []string
+			if apps != "" {
+				selectedApps = strings.Split(apps, ",")
+				for i := range selectedApps {
+					selectedApps[i] = strings.TrimSpace(selectedApps[i])
+				}
+			}
+
 			// Handle random scheme selection
 			if randomScheme {
-				return setRandomScheme(manager, !noApply, enableNotify)
+				return setRandomScheme(manager, !noApply, enableNotify, selectedApps, dryRun)
 			}
 
 			// Handle caelestia-compatible flags
 			if setName != "" || setFlavour != "" || setMode != "" || setVariant != "" {
-				return setSchemeByFlags(manager, setName, setFlavour, setMode, setVariant, !noApply, enableNotify)
+				return setSchemeByFlags(manager, setName, setFlavour, setMode, setVariant, !noApply, enableNotify, selectedApps, dryRun)
 			}
 
 			// Handle positional arguments
@@ -119,7 +131,22 @@ Examples:
 
 			// Apply theme unless disabled
 			if !noApply {
-				if err := applyTheme(newScheme); err != nil {
+				// Parse apps list if provided
+				var selectedApps []string
+				if apps != "" {
+					selectedApps = strings.Split(apps, ",")
+					for i := range selectedApps {
+						selectedApps[i] = strings.TrimSpace(selectedApps[i])
+					}
+				}
+
+				if dryRun {
+					// Dry run mode - show what would be applied
+					return performDryRun(newScheme, selectedApps)
+				}
+
+				// Apply theme with optional app selection
+				if err := applyThemeWithOptions(newScheme, selectedApps); err != nil {
 					logger.Error("Failed to apply theme", "error", err)
 					return fmt.Errorf("failed to apply theme: %w", err)
 				}
@@ -151,12 +178,19 @@ Examples:
 	cmd.Flags().StringVarP(&setVariant, "variant", "v", "", "Set variant")
 	cmd.Flags().BoolVarP(&randomScheme, "random", "r", false, "Random scheme selection")
 	cmd.Flags().BoolVar(&enableNotify, "notify", false, "Enable desktop notifications")
+	cmd.Flags().StringVar(&apps, "apps", "", "Comma-separated list of apps to theme (e.g., 'gtk,qt,discord')")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without applying them")
 
 	return cmd
 }
 
 // applyTheme applies the theme for the current scheme
 func applyTheme(s *scheme.Scheme) error {
+	return applyThemeWithOptions(s, nil)
+}
+
+// applyThemeWithOptions applies the theme with optional app selection
+func applyThemeWithOptions(s *scheme.Scheme, selectedApps []string) error {
 	// Load configuration
 	if err := config.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -169,36 +203,70 @@ func applyTheme(s *scheme.Scheme) error {
 	// Get colors as string map
 	colors := s.GetColors()
 
-	// Determine which apps to theme based on config
+	// Determine which apps to theme
 	apps := []string{}
 
-	if cfg.Theme.EnableBtop {
-		apps = append(apps, "btop")
-	}
-	if cfg.Theme.EnableDiscord {
-		apps = append(apps, "discord")
-	}
-	if cfg.Theme.EnableFuzzel {
-		apps = append(apps, "fuzzel")
-	}
-	if cfg.Theme.EnableGtk {
-		apps = append(apps, "gtk")
-	}
-	if cfg.Theme.EnableQt {
-		apps = append(apps, "qt")
-	}
-	if cfg.Theme.EnableSpicetify {
-		apps = append(apps, "spicetify")
+	// If specific apps are selected, use only those
+	if len(selectedApps) > 0 {
+		// Validate selected apps
+		validApps := map[string]bool{
+			"btop":      true,
+			"discord":   true,
+			"fuzzel":    true,
+			"gtk":       true,
+			"qt":        true,
+			"spicetify": true,
+			"terminal":  true,
+		}
+
+		for _, app := range selectedApps {
+			if !validApps[app] {
+				return fmt.Errorf("invalid app: %s (valid apps: btop, discord, fuzzel, gtk, qt, spicetify, terminal)", app)
+			}
+			apps = append(apps, app)
+		}
+	} else {
+		// Use config to determine which apps to theme
+		if cfg.Theme.EnableBtop {
+			apps = append(apps, "btop")
+		}
+		if cfg.Theme.EnableDiscord {
+			apps = append(apps, "discord")
+		}
+		if cfg.Theme.EnableFuzzel {
+			apps = append(apps, "fuzzel")
+		}
+		if cfg.Theme.EnableGtk {
+			apps = append(apps, "gtk")
+		}
+		if cfg.Theme.EnableQt {
+			apps = append(apps, "qt")
+		}
+		if cfg.Theme.EnableSpicetify {
+			apps = append(apps, "spicetify")
+		}
+		// Terminal sequences are always applied unless explicitly disabled
+		apps = append(apps, "terminal")
 	}
 
 	// Apply theme to each app
 	var errors []string
 	for _, app := range apps {
-		if err := applier.ApplyTheme(app, colors, s.Mode); err != nil {
-			errors = append(errors, fmt.Sprintf("%s: %v", app, err))
-			logger.Error("Failed to apply theme", "app", app, "error", err)
+		if app == "terminal" {
+			// Special handling for terminal sequences
+			if err := applier.ApplyTerminalSequences(colors, s.Name); err != nil {
+				errors = append(errors, fmt.Sprintf("terminal: %v", err))
+				logger.Error("Failed to apply terminal sequences", "error", err)
+			} else {
+				logger.Info("Applied terminal sequences")
+			}
 		} else {
-			logger.Info("Applied theme", "app", app)
+			if err := applier.ApplyTheme(app, colors, s.Mode); err != nil {
+				errors = append(errors, fmt.Sprintf("%s: %v", app, err))
+				logger.Error("Failed to apply theme", "app", app, "error", err)
+			} else {
+				logger.Info("Applied theme", "app", app)
+			}
 		}
 	}
 
@@ -209,8 +277,108 @@ func applyTheme(s *scheme.Scheme) error {
 	return nil
 }
 
+// performDryRun shows what would be applied without making changes
+func performDryRun(s *scheme.Scheme, selectedApps []string) error {
+	// Load configuration
+	if err := config.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	cfg := config.Get()
+
+	fmt.Println("=== DRY RUN MODE ===")
+	fmt.Printf("Scheme: %s/%s/%s\n", s.Name, s.Flavour, s.Mode)
+	if s.Variant != "" {
+		fmt.Printf("Variant: %s\n", s.Variant)
+	}
+	fmt.Println("\nFiles that would be modified:")
+
+	// Determine which apps would be themed
+	apps := []string{}
+
+	if len(selectedApps) > 0 {
+		// Validate selected apps
+		validApps := map[string]bool{
+			"btop":      true,
+			"discord":   true,
+			"fuzzel":    true,
+			"gtk":       true,
+			"qt":        true,
+			"spicetify": true,
+			"terminal":  true,
+		}
+
+		for _, app := range selectedApps {
+			if !validApps[app] {
+				return fmt.Errorf("invalid app: %s", app)
+			}
+			apps = append(apps, app)
+		}
+	} else {
+		// Use config to determine which apps to theme
+		if cfg.Theme.EnableBtop {
+			apps = append(apps, "btop")
+		}
+		if cfg.Theme.EnableDiscord {
+			apps = append(apps, "discord")
+		}
+		if cfg.Theme.EnableFuzzel {
+			apps = append(apps, "fuzzel")
+		}
+		if cfg.Theme.EnableGtk {
+			apps = append(apps, "gtk")
+		}
+		if cfg.Theme.EnableQt {
+			apps = append(apps, "qt")
+		}
+		if cfg.Theme.EnableSpicetify {
+			apps = append(apps, "spicetify")
+		}
+		apps = append(apps, "terminal")
+	}
+
+	// Show what files would be created/modified
+	for _, app := range apps {
+		switch app {
+		case "btop":
+			fmt.Printf("  - %s/btop/themes/heimdall.theme\n", paths.ConfigDir)
+		case "discord":
+			// Discord has multiple clients
+			fmt.Printf("  - %s/vesktop/themes/heimdall.css (if Vesktop installed)\n", paths.ConfigDir)
+			fmt.Printf("  - %s/discord/themes/heimdall.css (if Discord installed)\n", paths.ConfigDir)
+			fmt.Printf("  - %s/discordcanary/themes/heimdall.css (if Discord Canary installed)\n", paths.ConfigDir)
+			fmt.Printf("  - %s/Vencord/themes/heimdall.css (if Vencord installed)\n", paths.ConfigDir)
+			fmt.Printf("  - %s/Equicord/themes/heimdall.css (if Equicord installed)\n", paths.ConfigDir)
+			fmt.Printf("  - %s/BetterDiscord/themes/heimdall.theme.css (if BetterDiscord installed)\n", paths.ConfigDir)
+		case "fuzzel":
+			fmt.Printf("  - %s/fuzzel/fuzzel.ini\n", paths.ConfigDir)
+		case "gtk":
+			fmt.Printf("  - %s/gtk-3.0/gtk.css\n", paths.ConfigDir)
+			fmt.Printf("  - %s/gtk-4.0/gtk.css\n", paths.ConfigDir)
+		case "qt":
+			fmt.Printf("  - %s/qt5ct/colors/heimdall.conf\n", paths.ConfigDir)
+			fmt.Printf("  - %s/qt6ct/colors/heimdall.conf\n", paths.ConfigDir)
+		case "spicetify":
+			fmt.Printf("  - %s/spicetify/Themes/heimdall/color.ini\n", paths.ConfigDir)
+		case "terminal":
+			fmt.Printf("  - %s/sequences.txt\n", paths.ConfigDir)
+			fmt.Println("  - Terminal sequences would be applied to active terminals")
+		}
+	}
+
+	// Show scheme files that would be updated
+	fmt.Println("\nScheme files that would be updated:")
+	fmt.Printf("  - %s/scheme.json\n", paths.ConfigDir)
+	fmt.Printf("  - %s/.local/state/heimdall/scheme.json\n", os.Getenv("HOME"))
+	fmt.Printf("  - %s/.local/state/quickshell/user/generated/scheme.json (QuickShell integration)\n", os.Getenv("HOME"))
+
+	fmt.Println("\n=== END DRY RUN ===")
+	fmt.Println("No files were modified. Remove --dry-run to apply changes.")
+
+	return nil
+}
+
 // setRandomScheme selects and applies a random scheme
-func setRandomScheme(manager *scheme.Manager, shouldApplyTheme, shouldNotify bool) error {
+func setRandomScheme(manager *scheme.Manager, shouldApplyTheme, shouldNotify bool, selectedApps []string, dryRun bool) error {
 	// Get all available schemes
 	schemes, err := manager.ListSchemes()
 	if err != nil {
@@ -271,7 +439,12 @@ func setRandomScheme(manager *scheme.Manager, shouldApplyTheme, shouldNotify boo
 
 	// Apply theme if enabled
 	if shouldApplyTheme {
-		if err := applyTheme(newScheme); err != nil {
+		if dryRun {
+			// Dry run mode - show what would be applied
+			return performDryRun(newScheme, selectedApps)
+		}
+
+		if err := applyThemeWithOptions(newScheme, selectedApps); err != nil {
 			logger.Error("Failed to apply theme", "error", err)
 			return fmt.Errorf("failed to apply theme: %w", err)
 		}
@@ -292,7 +465,7 @@ func setRandomScheme(manager *scheme.Manager, shouldApplyTheme, shouldNotify boo
 }
 
 // setSchemeByFlags sets scheme using individual flags
-func setSchemeByFlags(manager *scheme.Manager, name, flavour, mode, variant string, shouldApplyTheme, shouldNotify bool) error {
+func setSchemeByFlags(manager *scheme.Manager, name, flavour, mode, variant string, shouldApplyTheme, shouldNotify bool, selectedApps []string, dryRun bool) error {
 	// Get current scheme to fill in missing values
 	current, err := manager.GetCurrent()
 	if err != nil {
@@ -342,7 +515,12 @@ func setSchemeByFlags(manager *scheme.Manager, name, flavour, mode, variant stri
 
 	// Apply theme if enabled
 	if shouldApplyTheme {
-		if err := applyTheme(newScheme); err != nil {
+		if dryRun {
+			// Dry run mode - show what would be applied
+			return performDryRun(newScheme, selectedApps)
+		}
+
+		if err := applyThemeWithOptions(newScheme, selectedApps); err != nil {
 			logger.Error("Failed to apply theme", "error", err)
 			return fmt.Errorf("failed to apply theme: %w", err)
 		}

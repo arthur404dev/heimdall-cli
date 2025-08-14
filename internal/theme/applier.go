@@ -1,9 +1,15 @@
+// Package theme provides the core theme engine for applying color schemes
+// to various applications and managing theme-related operations.
 package theme
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/arthur404dev/heimdall-cli/internal/discord"
 	"github.com/arthur404dev/heimdall-cli/internal/terminal"
@@ -12,19 +18,35 @@ import (
 
 // Applier applies themes to various applications
 type Applier struct {
-	replacer    *SimpleReplacer
-	configDir   string
-	dataDir     string
-	templateDir string
+	replacer     *SimpleReplacer
+	configDir    string
+	dataDir      string
+	templateDir  string
+	cache        *TemplateCache
+	colorCache   *ColorConversionCache
+	workerPool   int
+	lazyHandlers map[string]func() ApplicationHandler
+	handlers     map[string]ApplicationHandler
+	handlersMu   sync.RWMutex
 }
 
 // NewApplier creates a new theme applier
 func NewApplier(configDir, dataDir string) *Applier {
+	// Initialize caches
+	cacheDir := filepath.Join(dataDir, "cache")
+	templateCache := NewTemplateCache(10, true, cacheDir) // 10MB cache with disk persistence
+	colorCache := NewColorConversionCache(1000)           // Cache up to 1000 color conversions
+
 	return &Applier{
-		replacer:    NewSimpleReplacer(),
-		configDir:   configDir,
-		dataDir:     dataDir,
-		templateDir: filepath.Join(dataDir, "templates"),
+		replacer:     NewSimpleReplacer(),
+		configDir:    configDir,
+		dataDir:      dataDir,
+		templateDir:  filepath.Join(dataDir, "templates"),
+		cache:        templateCache,
+		colorCache:   colorCache,
+		workerPool:   8, // Default to 8 workers for parallel application
+		lazyHandlers: make(map[string]func() ApplicationHandler),
+		handlers:     make(map[string]ApplicationHandler),
 	}
 }
 
@@ -71,21 +93,82 @@ func (a *Applier) ApplyTheme(app string, colors map[string]string, mode string) 
 	return nil
 }
 
-// ApplyAllThemes applies themes to all supported applications
-func (a *Applier) ApplyAllThemes(colors map[string]string, mode string) error {
-	apps := []string{
-		"btop",
-		"fuzzel",
-		"gtk",
-		"qt",
-		"spicetify",
+// SetWorkerPoolSize sets the number of workers for parallel application
+func (a *Applier) SetWorkerPoolSize(size int) {
+	if size > 0 {
+		a.workerPool = size
+	}
+}
+
+// RegisterLazyHandler registers a handler to be loaded on first use
+func (a *Applier) RegisterLazyHandler(name string, factory func() ApplicationHandler) {
+	a.handlersMu.Lock()
+	defer a.handlersMu.Unlock()
+	a.lazyHandlers[name] = factory
+}
+
+// getHandler retrieves a handler, initializing it if needed (lazy loading)
+func (a *Applier) getHandler(name string) ApplicationHandler {
+	a.handlersMu.RLock()
+	handler, exists := a.handlers[name]
+	a.handlersMu.RUnlock()
+
+	if exists {
+		return handler
 	}
 
-	for _, app := range apps {
-		if err := a.ApplyTheme(app, colors, mode); err != nil {
-			// Log error but continue with other apps
-			fmt.Fprintf(os.Stderr, "Warning: failed to apply theme for %s: %v\n", app, err)
+	// Check for lazy handler
+	a.handlersMu.Lock()
+	defer a.handlersMu.Unlock()
+
+	// Double-check after acquiring write lock
+	if handler, exists = a.handlers[name]; exists {
+		return handler
+	}
+
+	if factory, ok := a.lazyHandlers[name]; ok {
+		start := time.Now()
+		handler = factory()
+		a.handlers[name] = handler
+		delete(a.lazyHandlers, name) // Remove factory after initialization
+
+		// Log initialization time
+		elapsed := time.Since(start)
+		if elapsed > 10*time.Millisecond {
+			fmt.Fprintf(os.Stderr, "Warning: Handler %s took %v to initialize\n", name, elapsed)
 		}
+
+		return handler
+	}
+
+	return nil
+}
+
+// ApplyAllThemes applies themes to all supported applications
+func (a *Applier) ApplyAllThemes(colors map[string]string, mode string, schemeName string) error {
+	// Apply GTK theme
+	gtkHandler := NewGTKHandler()
+	if err := gtkHandler.Apply(colors, mode); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to apply GTK theme: %v\n", err)
+	}
+
+	// Apply Qt theme
+	qtHandler := NewQtHandler()
+	if err := qtHandler.Apply(colors, mode); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to apply Qt theme: %v\n", err)
+	}
+
+	// Apply tool-specific themes
+	if err := a.ApplyBtopTheme(colors); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to apply btop theme: %v\n", err)
+	}
+
+	if err := a.ApplyFuzzelTheme(colors); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to apply fuzzel theme: %v\n", err)
+	}
+
+	if err := a.ApplySpicetifyTheme(colors); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to apply spicetify theme: %v\n", err)
 	}
 
 	// Apply Discord themes to all detected clients
@@ -94,15 +177,158 @@ func (a *Applier) ApplyAllThemes(colors map[string]string, mode string) error {
 	}
 
 	// Generate and save terminal sequences
-	if err := a.ApplyTerminalSequences(colors); err != nil {
+	if err := a.ApplyTerminalSequences(colors, schemeName); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to apply terminal sequences: %v\n", err)
 	}
 
 	return nil
 }
 
+// ApplyAllThemesParallel applies themes to all applications concurrently
+func (a *Applier) ApplyAllThemesParallel(ctx context.Context, colors map[string]string, mode string, schemeName string) error {
+	// Create a semaphore to limit concurrent workers
+	sem := make(chan struct{}, a.workerPool)
+
+	// Error channel to collect errors
+	errChan := make(chan error, 10) // Buffer for up to 10 errors
+
+	// WaitGroup to track all goroutines
+	var wg sync.WaitGroup
+
+	// Result tracking
+	type result struct {
+		app string
+		err error
+	}
+	results := make(chan result, 10)
+
+	// Start result collector
+	var allErrors []error
+	go func() {
+		for r := range results {
+			if r.err != nil {
+				allErrors = append(allErrors, fmt.Errorf("%s: %w", r.app, r.err))
+				fmt.Fprintf(os.Stderr, "Warning: failed to apply %s theme: %v\n", r.app, r.err)
+			}
+		}
+	}()
+
+	// Define all application tasks
+	tasks := []struct {
+		name string
+		fn   func() error
+	}{
+		{"gtk", func() error {
+			gtkHandler := NewGTKHandler()
+			return gtkHandler.Apply(colors, mode)
+		}},
+		{"qt", func() error {
+			qtHandler := NewQtHandler()
+			return qtHandler.Apply(colors, mode)
+		}},
+		{"btop", func() error {
+			return a.ApplyBtopTheme(colors)
+		}},
+		{"fuzzel", func() error {
+			return a.ApplyFuzzelTheme(colors)
+		}},
+		{"spicetify", func() error {
+			return a.ApplySpicetifyTheme(colors)
+		}},
+		{"discord", func() error {
+			return a.ApplyDiscordThemes(colors)
+		}},
+		{"terminal", func() error {
+			return a.ApplyTerminalSequences(colors, schemeName)
+		}},
+	}
+
+	// Launch workers for each task
+	for _, task := range tasks {
+		wg.Add(1)
+
+		// Copy task to avoid closure issues
+		t := task
+
+		go func() {
+			defer wg.Done()
+
+			// Acquire semaphore
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }() // Release semaphore
+			case <-ctx.Done():
+				results <- result{app: t.name, err: ctx.Err()}
+				return
+			}
+
+			// Check context cancellation
+			select {
+			case <-ctx.Done():
+				results <- result{app: t.name, err: ctx.Err()}
+				return
+			default:
+			}
+
+			// Execute task with timing
+			start := time.Now()
+			err := t.fn()
+			elapsed := time.Since(start)
+
+			// Log slow operations
+			if elapsed > 200*time.Millisecond {
+				fmt.Fprintf(os.Stderr, "Warning: %s theme took %v to apply\n", t.name, elapsed)
+			}
+
+			results <- result{app: t.name, err: err}
+		}()
+	}
+
+	// Wait for all tasks to complete
+	wg.Wait()
+	close(results)
+	close(errChan)
+
+	// Return aggregated errors if any
+	if len(allErrors) > 0 {
+		return fmt.Errorf("parallel theme application had %d errors", len(allErrors))
+	}
+
+	return nil
+}
+
+// ApplyThemeWithCache applies a theme using cached templates
+func (a *Applier) ApplyThemeWithCache(app string, colors map[string]string, mode string) error {
+	// Generate cache key
+	cacheKey := CacheKey(app, mode, colors)
+
+	// Check cache first
+	if cached, ok := a.cache.Get(cacheKey); ok {
+		// Use cached rendered template
+		if rendered, ok := cached.(string); ok {
+			outputPath := a.getOutputPath(app)
+			return paths.AtomicWrite(outputPath, []byte(rendered))
+		}
+	}
+
+	// Not in cache, render normally
+	err := a.ApplyTheme(app, colors, mode)
+	if err != nil {
+		return err
+	}
+
+	// Read rendered file and cache it
+	outputPath := a.getOutputPath(app)
+	if content, err := os.ReadFile(outputPath); err == nil {
+		// Store in cache (estimate size as byte length)
+		a.cache.Set(cacheKey, string(content), int64(len(content)))
+	}
+
+	return nil
+}
+
 // ApplyTerminalSequences generates and applies ANSI terminal sequences
-func (a *Applier) ApplyTerminalSequences(colors map[string]string) error {
+func (a *Applier) ApplyTerminalSequences(colors map[string]string, schemeName string) error {
 	builder := terminal.NewSequenceBuilder()
 	applier := terminal.NewApplier()
 
@@ -113,13 +339,13 @@ func (a *Applier) ApplyTerminalSequences(colors map[string]string) error {
 	}
 
 	// Apply sequences to active terminals immediately (like caelestia)
-	if err := applier.ApplySequencesWithFallback(colors); err != nil {
+	if err := applier.ApplySequencesWithFallback(colors, schemeName); err != nil {
 		// Log warning but don't fail the entire operation
 		fmt.Fprintf(os.Stderr, "Warning: failed to apply sequences to terminals: %v\n", err)
 	}
 
 	// Format for shell sourcing
-	shellScript := builder.FormatSequencesForShell(sequences)
+	shellScript := builder.FormatSequencesForShell(sequences, schemeName)
 
 	// Write to sequences file
 	sequencesPath := filepath.Join(a.configDir, "sequences.txt")
@@ -140,6 +366,117 @@ func (a *Applier) ApplyDiscordThemes(colors map[string]string) error {
 
 	// Apply themes to all detected Discord clients
 	return clientManager.ApplyThemeToAll(colors, cssTemplate, betterDiscordTemplate)
+}
+
+// ApplyBtopTheme applies theme to btop
+func (a *Applier) ApplyBtopTheme(colors map[string]string) error {
+	content := a.generateBtopTheme(colors)
+	btopPath := filepath.Join(a.configDir, "btop", "themes", "heimdall.theme")
+
+	// Ensure directory exists
+	dir := filepath.Dir(btopPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create btop themes directory: %w", err)
+	}
+
+	return paths.AtomicWrite(btopPath, []byte(content))
+}
+
+// ApplyFuzzelTheme applies theme to fuzzel
+func (a *Applier) ApplyFuzzelTheme(colors map[string]string) error {
+	content := a.generateFuzzelTheme(colors)
+	fuzzelPath := filepath.Join(a.configDir, "fuzzel", "fuzzel.ini")
+
+	// Ensure directory exists
+	dir := filepath.Dir(fuzzelPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create fuzzel directory: %w", err)
+	}
+
+	return paths.AtomicWrite(fuzzelPath, []byte(content))
+}
+
+// ApplySpicetifyTheme applies theme to Spicetify
+func (a *Applier) ApplySpicetifyTheme(colors map[string]string) error {
+	content := a.generateSpicetifyTheme(colors)
+	spicetifyPath := filepath.Join(a.configDir, "spicetify", "Themes", "heimdall", "color.ini")
+
+	// Ensure directory exists
+	dir := filepath.Dir(spicetifyPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create spicetify themes directory: %w", err)
+	}
+
+	return paths.AtomicWrite(spicetifyPath, []byte(content))
+}
+
+// generateBtopTheme generates btop theme content
+func (a *Applier) generateBtopTheme(colors map[string]string) string {
+	// Use the replacer to process the template
+	content, _ := a.replacer.ReplaceTemplate(btopTemplate, colors)
+	return content
+}
+
+// generateFuzzelTheme generates fuzzel theme content
+func (a *Applier) generateFuzzelTheme(colors map[string]string) string {
+	// Fuzzel uses RGBA format, need to convert colors
+	bg := strings.TrimPrefix(colors["background"], "#")
+	fg := strings.TrimPrefix(colors["foreground"], "#")
+	primary := strings.TrimPrefix(colors["colour4"], "#")
+	surface := strings.TrimPrefix(colors["colour0"], "#")
+	outline := strings.TrimPrefix(colors["colour8"], "#")
+
+	return fmt.Sprintf(`# Heimdall theme for fuzzel
+# Generated automatically
+
+[main]
+font=monospace:size=10
+dpi-aware=yes
+width=30
+horizontal-pad=20
+vertical-pad=10
+inner-pad=10
+
+[colors]
+background=%sdd
+text=%sff
+match=%sff
+selection=%sff
+selection-text=%sff
+selection-match=%sff
+border=%sff
+`, bg, fg, primary, surface, fg, primary, outline)
+}
+
+// generateSpicetifyTheme generates Spicetify theme content
+func (a *Applier) generateSpicetifyTheme(colors map[string]string) string {
+	// Spicetify uses colors without # prefix
+	bg := strings.TrimPrefix(colors["background"], "#")
+	fg := strings.TrimPrefix(colors["foreground"], "#")
+	surface := strings.TrimPrefix(colors["colour0"], "#")
+	surfaceVar := strings.TrimPrefix(colors["colour8"], "#")
+	primary := strings.TrimPrefix(colors["colour4"], "#")
+	secondary := strings.TrimPrefix(colors["colour7"], "#")
+
+	return fmt.Sprintf(`# Heimdall theme for Spicetify
+# Generated automatically
+
+[Base]
+main_bg = %s
+sidebar_bg = %s
+player_bg = %s
+card_bg = %s
+shadow = 000000
+main_fg = %s
+sidebar_fg = %s
+secondary_fg = %s
+selected_button = %s
+pressing_button_bg = %s
+pressing_button_fg = %s
+miscellaneous_bg = %s
+miscellaneous_hover_bg = %s
+preserve_1 = ffffff
+`, bg, surface, surfaceVar, surface, fg, fg, secondary, primary, surface, fg, surfaceVar, surface)
 }
 
 // getOutputPath returns the output path for a themed application

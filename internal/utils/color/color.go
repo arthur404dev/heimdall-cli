@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Color represents a color with multiple representations
@@ -385,4 +386,142 @@ func (c *Color) Desaturate(percent float64) *Color {
 	hsl := c.HSL
 	hsl.S = math.Max(0, hsl.S-percent)
 	return NewFromHSL(hsl.H, hsl.S, hsl.L)
+}
+
+// ColorConverter provides optimized color conversions with caching
+type ColorConverter struct {
+	mu    sync.RWMutex
+	cache map[string]*Color // Cache parsed colors
+}
+
+// Global converter instance with caching
+var globalConverter = &ColorConverter{
+	cache: make(map[string]*Color),
+}
+
+// FastHexToRGB converts hex to RGB with caching (optimized)
+func FastHexToRGB(hex string) (r, g, b uint8, err error) {
+	// Remove # if present
+	hex = strings.TrimPrefix(hex, "#")
+
+	// Fast path for common case
+	if len(hex) == 6 {
+		// Use lookup table for hex conversion (faster than strconv)
+		r = hexToByte(hex[0])<<4 | hexToByte(hex[1])
+		g = hexToByte(hex[2])<<4 | hexToByte(hex[3])
+		b = hexToByte(hex[4])<<4 | hexToByte(hex[5])
+		return r, g, b, nil
+	}
+
+	return 0, 0, 0, fmt.Errorf("invalid hex color: %s", hex)
+}
+
+// hexToByte converts a hex character to byte value (optimized with lookup)
+func hexToByte(c byte) uint8 {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0'
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10
+	default:
+		return 0
+	}
+}
+
+// BatchConvertColors converts multiple colors in parallel
+func BatchConvertColors(colors []string) ([]*Color, error) {
+	results := make([]*Color, len(colors))
+	errors := make([]error, len(colors))
+
+	var wg sync.WaitGroup
+	for i, hex := range colors {
+		wg.Add(1)
+		go func(idx int, hexColor string) {
+			defer wg.Done()
+
+			// Check cache first
+			globalConverter.mu.RLock()
+			if cached, ok := globalConverter.cache[hexColor]; ok {
+				globalConverter.mu.RUnlock()
+				results[idx] = cached
+				return
+			}
+			globalConverter.mu.RUnlock()
+
+			// Convert and cache
+			color, err := NewFromHex(hexColor)
+			if err != nil {
+				errors[idx] = err
+				return
+			}
+
+			// Store in cache
+			globalConverter.mu.Lock()
+			globalConverter.cache[hexColor] = color
+			globalConverter.mu.Unlock()
+
+			results[idx] = color
+		}(i, hex)
+	}
+
+	wg.Wait()
+
+	// Check for errors
+	for _, err := range errors {
+		if err != nil {
+			return results, err
+		}
+	}
+
+	return results, nil
+}
+
+// OptimizedPaletteConversion converts a full palette with optimizations
+func OptimizedPaletteConversion(palette map[string]string) (map[string]*Color, error) {
+	results := make(map[string]*Color, len(palette))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for name, hex := range palette {
+		wg.Add(1)
+		go func(n, h string) {
+			defer wg.Done()
+
+			// Check cache
+			globalConverter.mu.RLock()
+			if cached, ok := globalConverter.cache[h]; ok {
+				globalConverter.mu.RUnlock()
+				mu.Lock()
+				results[n] = cached
+				mu.Unlock()
+				return
+			}
+			globalConverter.mu.RUnlock()
+
+			// Convert
+			color, err := NewFromHex(h)
+			if err == nil {
+				// Cache it
+				globalConverter.mu.Lock()
+				globalConverter.cache[h] = color
+				globalConverter.mu.Unlock()
+
+				mu.Lock()
+				results[n] = color
+				mu.Unlock()
+			}
+		}(name, hex)
+	}
+
+	wg.Wait()
+	return results, nil
+}
+
+// ClearColorCache clears the global color cache
+func ClearColorCache() {
+	globalConverter.mu.Lock()
+	defer globalConverter.mu.Unlock()
+	globalConverter.cache = make(map[string]*Color)
 }

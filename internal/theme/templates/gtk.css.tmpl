@@ -1,0 +1,36 @@
+/* Heimdall GTK Theme */
+
+@define-color background {{background}};
+@define-color foreground {{foreground}};
+@define-color primary {{colour4}};
+@define-color primary_container {{background|lighten:10}};
+@define-color secondary {{colour5}};
+@define-color secondary_container {{background|lighten:15}};
+@define-color error {{colour1}};
+@define-color warning {{colour3}};
+@define-color success {{colour2}};
+@define-color surface {{background|darken:5}};
+@define-color on_surface {{foreground}};
+@define-color outline {{colour8}};
+
+window {
+    background-color: @background;
+    color: @foreground;
+}
+
+button {
+    background-color: @primary_container;
+    color: @foreground;
+    border-color: @outline;
+}
+
+button:hover {
+    background-color: @primary;
+    color: @background;
+}
+
+entry {
+    background-color: @surface;
+    color: @on_surface;
+    border-color: @outline;
+}

@@ -273,7 +273,7 @@ func TestSequenceBuilder_FormatSequencesForShell(t *testing.T) {
 		"\\033]4;1;rgb:f7/76/8e\\033\\\\",
 	}
 
-	result := sb.FormatSequencesForShell(sequences)
+	result := sb.FormatSequencesForShell(sequences, "test-scheme")
 
 	// Check that it starts with shebang
 	if !strings.HasPrefix(result, "#!/bin/bash") {

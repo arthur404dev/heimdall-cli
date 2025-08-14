@@ -1,3 +1,5 @@
+// Package terminal provides functionality for applying color schemes to terminal emulators
+// through ANSI escape sequences and configuration files.
 package terminal
 
 import (
@@ -29,22 +31,35 @@ type TerminalDevice struct {
 	Writable bool
 }
 
-// ApplyToTerminals applies ANSI sequences to all active terminal devices
-func (a *Applier) ApplyToTerminals(colours map[string]string) error {
+// ApplyToTerminals applies ANSI sequences to all active terminal devices and writes to file
+func (a *Applier) ApplyToTerminals(colours map[string]string, schemeName string) error {
 	// Generate sequences
 	sequences, err := a.sequenceBuilder.GenerateSequences(colours)
 	if err != nil {
 		return fmt.Errorf("failed to generate sequences: %w", err)
 	}
 
+	// Write sequences to file for sourcing
+	if err := a.writeSequencesToFile(sequences, schemeName); err != nil {
+		logger.Warn("Failed to write sequences to file", "error", err)
+		// Don't fail the operation, continue with PTY application
+	}
+
+	// Check if we're in a PTY environment
+	if !a.isInPTY() {
+		logger.Info("Not in a PTY environment, sequences written to file only")
+		return nil
+	}
+
 	// Detect active terminals
 	terminals, err := a.detectActiveTerminals()
 	if err != nil {
-		return fmt.Errorf("failed to detect terminals: %w", err)
+		logger.Warn("Failed to detect terminals, sequences written to file", "error", err)
+		return nil // Don't fail, file was written
 	}
 
 	if len(terminals) == 0 {
-		logger.Info("No active terminals detected")
+		logger.Info("No active terminals detected, sequences written to file")
 		return nil
 	}
 
@@ -55,13 +70,13 @@ func (a *Applier) ApplyToTerminals(colours map[string]string) error {
 	for _, terminal := range terminals {
 		if err := a.applySequencesToTerminal(terminal, sequences); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %v", terminal.Path, err))
-			logger.Error("Failed to apply sequences to terminal",
+			logger.Debug("Failed to apply sequences to terminal",
 				"path", terminal.Path,
 				"pid", terminal.PID,
 				"error", err)
 		} else {
 			successCount++
-			logger.Info("Applied sequences to terminal",
+			logger.Debug("Applied sequences to terminal",
 				"path", terminal.Path,
 				"pid", terminal.PID)
 		}
@@ -74,10 +89,45 @@ func (a *Applier) ApplyToTerminals(colours map[string]string) error {
 
 	// Don't fail the entire operation if some terminals can't be written to
 	if len(errors) > 0 {
-		logger.Warn("Some terminals could not be updated", "errors", strings.Join(errors, "; "))
+		logger.Debug("Some terminals could not be updated", "errors", strings.Join(errors, "; "))
 	}
 
 	return nil
+}
+
+// writeSequencesToFile writes sequences to ~/.config/heimdall/sequences.txt
+func (a *Applier) writeSequencesToFile(sequences []string, schemeName string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	configDir := filepath.Join(homeDir, ".config", "heimdall")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	sequencesPath := filepath.Join(configDir, "sequences.txt")
+	content := a.sequenceBuilder.FormatSequencesForShell(sequences, schemeName)
+
+	if err := os.WriteFile(sequencesPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write sequences file: %w", err)
+	}
+
+	logger.Info("Terminal sequences written to file", "path", sequencesPath)
+	return nil
+}
+
+// isInPTY checks if we're running in a pseudo-terminal
+func (a *Applier) isInPTY() bool {
+	// Check if stdout is a terminal
+	fileInfo, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+
+	// Check if it's a character device (terminal)
+	return fileInfo.Mode()&os.ModeCharDevice != 0
 }
 
 // detectActiveTerminals scans /dev/pts/ for active terminal devices
@@ -280,8 +330,8 @@ func isNumeric(s string) bool {
 }
 
 // ApplySequencesWithFallback applies sequences with graceful error handling
-func (a *Applier) ApplySequencesWithFallback(colours map[string]string) error {
-	err := a.ApplyToTerminals(colours)
+func (a *Applier) ApplySequencesWithFallback(colours map[string]string, schemeName string) error {
+	err := a.ApplyToTerminals(colours, schemeName)
 	if err != nil {
 		// Log the error but don't fail the entire operation
 		logger.Warn("Terminal application failed, continuing with other theme applications", "error", err)
