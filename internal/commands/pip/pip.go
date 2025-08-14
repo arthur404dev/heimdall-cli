@@ -170,21 +170,32 @@ func isVideoWindow(class, title string) bool {
 	class = strings.ToLower(class)
 	title = strings.ToLower(title)
 
-	// Check for common video player applications
-	videoApps := []string{
-		"mpv", "vlc", "firefox", "chromium", "chrome",
-		"brave", "youtube", "netflix", "twitch", "spotify",
+	// Load configuration
+	cfg := config.Get()
+
+	// Use configured video apps or fallback to defaults
+	videoApps := cfg.PIP.VideoApps
+	if len(videoApps) == 0 {
+		videoApps = []string{
+			"mpv", "vlc", "firefox", "chromium", "chrome",
+			"brave", "youtube", "netflix", "twitch", "spotify",
+		}
 	}
 
 	for _, app := range videoApps {
 		if strings.Contains(class, app) {
 			// Additional checks for browsers
 			if strings.Contains(class, "firefox") || strings.Contains(class, "chrom") || strings.Contains(class, "brave") {
-				// Check if title indicates video
-				videoKeywords := []string{
-					"youtube", "netflix", "twitch", "vimeo",
-					"- playing", "▶", "►", "video", "stream",
+				// Use configured video keywords or fallback to defaults
+				videoKeywords := cfg.PIP.VideoKeywords
+				if len(videoKeywords) == 0 {
+					videoKeywords = []string{
+						"youtube", "netflix", "twitch", "vimeo",
+						"- playing", "▶", "►", "video", "stream",
+					}
 				}
+
+				// Check if title indicates video
 				for _, keyword := range videoKeywords {
 					if strings.Contains(title, keyword) {
 						return true

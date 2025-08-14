@@ -3,6 +3,7 @@ package scheme
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,16 +79,39 @@ func (m *Manager) SetScheme(scheme *Scheme) error {
 	return nil
 }
 
-// ListSchemes returns available scheme names from the schemes directory
+// ListSchemes returns available scheme names from the schemes directory and embedded assets
 func (m *Manager) ListSchemes() ([]string, error) {
-	// Try multiple locations for scheme directories
+	schemeMap := make(map[string]bool) // Use map to avoid duplicates
+
+	// First, add bundled schemes from embedded assets
+	err := fs.WalkDir(schemes.Content, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip root and non-directories
+		if path == "." || !d.IsDir() {
+			return nil
+		}
+
+		// Only add top-level directories (scheme names)
+		parts := strings.Split(path, "/")
+		if len(parts) == 1 {
+			schemeMap[parts[0]] = true
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to walk embedded schemes: %w", err)
+	}
+
+	// Then, add user schemes from filesystem directories
 	schemeDirs := []string{
 		m.schemesDir, // Primary location (data dir)
 		filepath.Join(paths.SchemeCacheDir, "schemes"), // Legacy cache location with extra "schemes" level
 		paths.SchemeCacheDir,                           // Direct cache location
 	}
-
-	schemeMap := make(map[string]bool) // Use map to avoid duplicates
 
 	for _, schemeDir := range schemeDirs {
 		entries, err := os.ReadDir(schemeDir)
@@ -103,12 +127,12 @@ func (m *Manager) ListSchemes() ([]string, error) {
 	}
 
 	// Convert map to slice
-	var schemes []string
+	var schemesList []string
 	for scheme := range schemeMap {
-		schemes = append(schemes, scheme)
+		schemesList = append(schemesList, scheme)
 	}
 
-	return schemes, nil
+	return schemesList, nil
 }
 
 // ListFlavours returns available flavours for a scheme
