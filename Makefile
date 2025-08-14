@@ -34,7 +34,7 @@ GOLINT := golangci-lint
 # Platforms for cross-compilation
 PLATFORMS := linux/amd64 linux/arm64 linux/386 freebsd/amd64
 
-.PHONY: all build clean test coverage fmt lint install uninstall run help
+.PHONY: all build clean test test-unit test-integration test-commands test-coverage test-coverage-html test-bench test-race test-short test-verbose test-watch test-clean fmt lint install uninstall run help
 
 # Default target
 all: clean fmt lint test build
@@ -78,16 +78,153 @@ clean:
 	@rm -rf $(BUILD_DIR) $(DIST_DIR)
 	@echo "Clean complete"
 
-# Run tests
-test:
-	@echo "Running tests..."
-	$(GOTEST) -v -race -coverprofile=coverage.out ./...
+# ============================================================================
+# TEST TARGETS
+# ============================================================================
 
-# Run tests with coverage report
-coverage: test
-	@echo "Generating coverage report..."
+# Run all tests (default test target)
+test:
+	@echo "Running all tests..."
+	@$(GOTEST) -v -race -coverprofile=coverage.out ./...
+	@echo "Tests completed. Coverage report: coverage.out"
+
+# Run unit tests only (fast tests without integration)
+test-unit:
+	@echo "Running unit tests..."
+	@$(GOTEST) -v -short -race ./...
+
+# Run integration tests only (slower tests)
+test-integration:
+	@echo "Running integration tests..."
+	@$(GOTEST) -v -run Integration ./...
+
+# Run tests for specific commands
+test-commands:
+	@echo "Running command tests..."
+	@$(GOTEST) -v -race ./internal/commands/...
+
+# Run tests with coverage analysis
+test-coverage:
+	@echo "Running tests with coverage analysis..."
+	@$(GOTEST) -v -race -coverprofile=coverage.out -covermode=atomic ./...
+	@$(GOCMD) tool cover -func=coverage.out
+	@echo "Coverage profile saved to: coverage.out"
+
+# Generate HTML coverage report
+test-coverage-html: test-coverage
+	@echo "Generating HTML coverage report..."
 	@$(GOCMD) tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report generated: coverage.html"
+	@echo "HTML coverage report generated: coverage.html"
+	@echo "Open coverage.html in your browser to view detailed coverage"
+
+# Run benchmark tests
+test-bench:
+	@echo "Running benchmark tests..."
+	@$(GOTEST) -v -bench=. -benchmem ./...
+
+# Run tests with race detection
+test-race:
+	@echo "Running tests with race detection..."
+	@$(GOTEST) -v -race ./...
+
+# Run short tests only (skip long-running tests)
+test-short:
+	@echo "Running short tests..."
+	@$(GOTEST) -v -short ./...
+
+# Run tests with verbose output
+test-verbose:
+	@echo "Running tests with verbose output..."
+	@$(GOTEST) -v ./...
+
+# Run tests and watch for changes (requires entr)
+test-watch:
+	@echo "Running tests in watch mode..."
+	@if command -v entr >/dev/null 2>&1; then \
+		find . -name "*.go" | entr -c $(GOTEST) -v ./...; \
+	else \
+		echo "entr not installed. Install with your package manager (e.g., apt install entr)"; \
+		echo "Falling back to single test run..."; \
+		$(MAKE) test; \
+	fi
+
+# Clean test artifacts
+test-clean:
+	@echo "Cleaning test artifacts..."
+	@rm -f coverage.out coverage.html
+	@rm -f *.test
+	@rm -rf test-results/
+	@echo "Test artifacts cleaned"
+
+# Run specific test by name (usage: make test-run TEST=TestFunctionName)
+test-run:
+	@if [ -z "$(TEST)" ]; then \
+		echo "Usage: make test-run TEST=TestFunctionName"; \
+		echo "Example: make test-run TEST=TestRootCommand"; \
+		exit 1; \
+	fi
+	@echo "Running test: $(TEST)"
+	@$(GOTEST) -v -run "$(TEST)" ./...
+
+# Run tests for specific package (usage: make test-pkg PKG=./internal/commands/config)
+test-pkg:
+	@if [ -z "$(PKG)" ]; then \
+		echo "Usage: make test-pkg PKG=./path/to/package"; \
+		echo "Example: make test-pkg PKG=./internal/commands/config"; \
+		exit 1; \
+	fi
+	@echo "Running tests for package: $(PKG)"
+	@$(GOTEST) -v -race $(PKG)
+
+# Run tests with timeout (usage: make test-timeout TIMEOUT=30s)
+test-timeout:
+	@TIMEOUT=$${TIMEOUT:-10s}; \
+	echo "Running tests with timeout: $$TIMEOUT"; \
+	$(GOTEST) -v -timeout $$TIMEOUT ./...
+
+# Run tests and generate JUnit XML report (requires go-junit-report)
+test-junit:
+	@echo "Running tests and generating JUnit XML report..."
+	@mkdir -p test-results
+	@if command -v go-junit-report >/dev/null 2>&1; then \
+		$(GOTEST) -v ./... 2>&1 | go-junit-report > test-results/junit.xml; \
+		echo "JUnit XML report generated: test-results/junit.xml"; \
+	else \
+		echo "go-junit-report not installed. Install with: go install github.com/jstemmer/go-junit-report@latest"; \
+		$(MAKE) test; \
+	fi
+
+# Run tests with memory profiling
+test-memprofile:
+	@echo "Running tests with memory profiling..."
+	@$(GOTEST) -v -memprofile=mem.prof ./...
+	@echo "Memory profile saved to: mem.prof"
+	@echo "View with: go tool pprof mem.prof"
+
+# Run tests with CPU profiling
+test-cpuprofile:
+	@echo "Running tests with CPU profiling..."
+	@$(GOTEST) -v -cpuprofile=cpu.prof ./...
+	@echo "CPU profile saved to: cpu.prof"
+	@echo "View with: go tool pprof cpu.prof"
+
+# Run all test variants (comprehensive test suite)
+test-all: test-clean
+	@echo "Running comprehensive test suite..."
+	@echo "1. Unit tests..."
+	@$(MAKE) test-unit
+	@echo "2. Integration tests..."
+	@$(MAKE) test-integration
+	@echo "3. Race detection..."
+	@$(MAKE) test-race
+	@echo "4. Benchmarks..."
+	@$(MAKE) test-bench
+	@echo "5. Coverage analysis..."
+	@$(MAKE) test-coverage-html
+	@echo "Comprehensive test suite completed!"
+
+# Legacy coverage target (for backward compatibility)
+coverage: test-coverage-html
 
 # Format code
 fmt:
@@ -191,30 +328,62 @@ help:
 	@echo "Usage:"
 	@echo "  make [target]"
 	@echo ""
-	@echo "Targets:"
+	@echo "Build Targets:"
 	@echo "  all          - Clean, format, lint, test, and build"
 	@echo "  build        - Build the binary with version info"
 	@echo "  quick        - Quick build for development (no version info)"
 	@echo "  build-all    - Build for all platforms"
 	@echo "  build-release- Build optimized release binary"
 	@echo "  clean        - Remove build artifacts"
-	@echo "  test         - Run tests"
-	@echo "  coverage     - Run tests with coverage report"
+	@echo ""
+	@echo "Test Targets:"
+	@echo "  test         - Run all tests with race detection and coverage"
+	@echo "  test-unit    - Run unit tests only (fast)"
+	@echo "  test-integration - Run integration tests only"
+	@echo "  test-commands- Run command tests specifically"
+	@echo "  test-coverage- Run tests with coverage analysis"
+	@echo "  test-coverage-html - Generate HTML coverage report"
+	@echo "  test-bench   - Run benchmark tests"
+	@echo "  test-race    - Run tests with race detection"
+	@echo "  test-short   - Run short tests only"
+	@echo "  test-verbose - Run tests with verbose output"
+	@echo "  test-watch   - Run tests in watch mode (requires entr)"
+	@echo "  test-clean   - Clean test artifacts"
+	@echo "  test-run     - Run specific test (TEST=TestName)"
+	@echo "  test-pkg     - Run tests for specific package (PKG=./path)"
+	@echo "  test-timeout - Run tests with timeout (TIMEOUT=30s)"
+	@echo "  test-junit   - Generate JUnit XML report (requires go-junit-report)"
+	@echo "  test-memprofile - Run tests with memory profiling"
+	@echo "  test-cpuprofile - Run tests with CPU profiling"
+	@echo "  test-all     - Run comprehensive test suite"
+	@echo "  coverage     - Alias for test-coverage-html"
+	@echo ""
+	@echo "Development Targets:"
 	@echo "  fmt          - Format code"
 	@echo "  lint         - Run linter"
+	@echo "  run          - Build and run the application"
+	@echo "  run-args     - Build and run with arguments (ARGS=...)"
+	@echo "  dev          - Run with hot reload (requires air)"
+	@echo ""
+	@echo "Installation Targets:"
 	@echo "  install      - Install binary to /usr/local/bin (requires sudo)"
 	@echo "  install-local- Install binary to ~/.local/bin"
 	@echo "  update       - Update binary in ~/.local/bin (alias for install-local)"
 	@echo "  uninstall    - Remove binary from /usr/local/bin (requires sudo)"
 	@echo "  uninstall-local - Remove binary from ~/.local/bin"
-	@echo "  run          - Build and run the application"
-	@echo "  run-args     - Build and run with arguments (ARGS=...)"
-	@echo "  dev          - Run with hot reload (requires air)"
+	@echo ""
+	@echo "Utility Targets:"
 	@echo "  deps         - Update dependencies"
 	@echo "  verify       - Verify dependencies"
 	@echo "  docs         - Generate documentation"
 	@echo "  version      - Show version information"
 	@echo "  help         - Show this help message"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make test-run TEST=TestRootCommand"
+	@echo "  make test-pkg PKG=./internal/commands/config"
+	@echo "  make test-timeout TIMEOUT=30s"
+	@echo "  make run-args ARGS='--help'"
 
 # Set default goal
 .DEFAULT_GOAL := help
