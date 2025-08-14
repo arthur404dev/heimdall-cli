@@ -137,14 +137,37 @@ func (m *Manager) ListSchemes() ([]string, error) {
 
 // ListFlavours returns available flavours for a scheme
 func (m *Manager) ListFlavours(schemeName string) ([]string, error) {
-	// Try multiple locations for scheme directories
+	flavourMap := make(map[string]bool) // Use map to avoid duplicates
+
+	// First check embedded assets
+	err := fs.WalkDir(schemes.Content, schemeName, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // Skip if scheme doesn't exist in embedded assets
+		}
+
+		// Skip the root directory and files
+		if path == schemeName || !d.IsDir() {
+			return nil
+		}
+
+		// Extract flavour name (first level subdirectory)
+		relativePath := strings.TrimPrefix(path, schemeName+"/")
+		parts := strings.Split(relativePath, "/")
+		if len(parts) >= 1 && parts[0] != "" {
+			flavourMap[parts[0]] = true
+		}
+
+		return nil
+	})
+	// Ignore errors from embedded assets walk (scheme might not exist there)
+	_ = err
+
+	// Then check filesystem locations
 	schemePaths := []string{
 		filepath.Join(m.schemesDir, schemeName),                    // Primary location (data dir)
 		filepath.Join(paths.SchemeCacheDir, "schemes", schemeName), // Legacy cache location with extra "schemes" level
 		filepath.Join(paths.SchemeCacheDir, schemeName),            // Direct cache location
 	}
-
-	flavourMap := make(map[string]bool) // Use map to avoid duplicates
 
 	for _, schemePath := range schemePaths {
 		entries, err := os.ReadDir(schemePath)
@@ -174,14 +197,26 @@ func (m *Manager) ListFlavours(schemeName string) ([]string, error) {
 
 // ListModes returns available modes for a scheme flavour
 func (m *Manager) ListModes(schemeName, flavour string) ([]string, error) {
-	// Try multiple locations for flavour directories
+	modeMap := make(map[string]bool) // Use map to avoid duplicates
+
+	// First check embedded assets
+	embeddedPath := filepath.Join(schemeName, flavour)
+	entries, err := fs.ReadDir(schemes.Content, embeddedPath)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".txt") {
+				mode := strings.TrimSuffix(entry.Name(), ".txt")
+				modeMap[mode] = true
+			}
+		}
+	}
+
+	// Then check filesystem locations
 	flavourPaths := []string{
 		filepath.Join(m.schemesDir, schemeName, flavour),                    // Primary location (data dir)
 		filepath.Join(paths.SchemeCacheDir, "schemes", schemeName, flavour), // Legacy cache location with extra "schemes" level
 		filepath.Join(paths.SchemeCacheDir, schemeName, flavour),            // Direct cache location
 	}
-
-	modeMap := make(map[string]bool) // Use map to avoid duplicates
 
 	for _, flavourPath := range flavourPaths {
 		entries, err := os.ReadDir(flavourPath)

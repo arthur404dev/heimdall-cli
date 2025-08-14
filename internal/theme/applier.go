@@ -30,6 +30,11 @@ func NewApplier(configDir, dataDir string) *Applier {
 
 // ApplyTheme applies a theme to a specific application
 func (a *Applier) ApplyTheme(app string, colors map[string]string, mode string) error {
+	// Special handling for Discord
+	if app == "discord" {
+		return a.ApplyDiscordThemes(colors)
+	}
+
 	// Load the template for the application
 	templatePath := filepath.Join(a.templateDir, app+".tmpl")
 
