@@ -253,10 +253,10 @@ func testListCommandCaelestiaFormat(t *testing.T) {
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 
-	// Mock the listCaelestiaFormat function
-	originalListCaelestiaFormat := listCaelestiaFormatFunc
-	defer func() { listCaelestiaFormatFunc = originalListCaelestiaFormat }()
-	listCaelestiaFormatFunc = func() error {
+	// Mock the listJSONFormat function
+	originalListJSONFormat := listJSONFormatFunc
+	defer func() { listJSONFormatFunc = originalListJSONFormat }()
+	listJSONFormatFunc = func() error {
 		// Return a simple JSON structure for testing
 		testOutput := map[string]map[string]map[string]string{
 			"catppuccin": {
@@ -396,8 +396,8 @@ func testListCommandManagerError(t *testing.T) {
 	}
 }
 
-// Variable to allow mocking the listCaelestiaFormat function
-var listCaelestiaFormatFunc = listCaelestiaFormat
+// Variable to allow mocking the listJSONFormat function
+var listJSONFormatFunc = listJSONFormat
 
 func TestListCommandIntegration(t *testing.T) {
 	tests := []struct {

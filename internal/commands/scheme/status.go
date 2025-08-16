@@ -1,0 +1,291 @@
+package scheme
+
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/arthur404dev/heimdall-cli/internal/scheme"
+	"github.com/arthur404dev/heimdall-cli/internal/theme"
+	"github.com/spf13/cobra"
+)
+
+// statusCommand creates the scheme status subcommand
+func statusCommand() *cobra.Command {
+	var (
+		showHistory bool
+		jsonOutput  bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show current theme status and state",
+		Long: `Display information about the current theme state including:
+- Currently active theme
+- Theme source (bundled/user/generated)
+- Application time
+- Available generated theme
+- User preferences
+
+Examples:
+  heimdall scheme status           # Show current theme status
+  heimdall scheme status --history  # Include theme history
+  heimdall scheme status --json     # Output in JSON format`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			stateManager := theme.NewStateManager()
+			state := stateManager.GetState()
+
+			if jsonOutput {
+				return outputJSON(state)
+			}
+
+			// Display current theme
+			current := state.Current
+			fmt.Printf("\033[36;1mCurrent Theme\033[0m\n")
+			fmt.Printf("━━━━━━━━━━━━━\n")
+			fmt.Printf("Name:     %s\n", current.Name)
+			if current.Flavour != "" {
+				fmt.Printf("Flavour:  %s\n", current.Flavour)
+			}
+			if current.Mode != "" {
+				fmt.Printf("Mode:     %s\n", current.Mode)
+			}
+			if current.Variant != "" {
+				fmt.Printf("Variant:  %s\n", current.Variant)
+			}
+
+			// Show source with color
+			sourceColor := getSourceColor(current.Source)
+			fmt.Printf("Source:   %s%s\033[0m\n", sourceColor, current.Source)
+
+			fmt.Printf("Applied:  %s\n", formatTime(current.AppliedAt))
+
+			// Show generated theme availability
+			if state.Generated.Available {
+				fmt.Printf("\n\033[33;1mGenerated Theme Available\033[0m\n")
+				fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━\n")
+				fmt.Printf("Wallpaper:  %s\n", state.Generated.WallpaperPath)
+				fmt.Printf("Generated:  %s\n", formatTime(state.Generated.GeneratedAt))
+				if state.Generated.PreferredVariant != "" {
+					fmt.Printf("Variant:    %s\n", state.Generated.PreferredVariant)
+				}
+				fmt.Printf("\nTo apply: heimdall scheme set generated\n")
+			}
+
+			// Show preferences
+			fmt.Printf("\n\033[34;1mPreferences\033[0m\n")
+			fmt.Printf("━━━━━━━━━━━\n")
+			prefs := state.Preferences
+			fmt.Printf("Auto-apply generated:  %s\n", formatBool(prefs.AutoApplyGenerated))
+			fmt.Printf("Auto-apply user:       %s\n", formatBool(prefs.AutoApplyUser))
+			fmt.Printf("Auto-apply bundled:    %s\n", formatBool(prefs.AutoApplyBundled))
+			fmt.Printf("Preferred variant:     %s\n", prefs.PreferredVariant)
+			fmt.Printf("Preferred mode:        %s\n", prefs.PreferredMode)
+			fmt.Printf("Notify on generation:  %s\n", formatBool(prefs.NotifyOnGeneration))
+
+			// Show history if requested
+			if showHistory && len(state.History) > 0 {
+				fmt.Printf("\n\033[35;1mTheme History\033[0m\n")
+				fmt.Printf("━━━━━━━━━━━━━\n")
+				for i, h := range state.History {
+					fmt.Printf("%d. %s", i+1, h.Name)
+					if h.Flavour != "" {
+						fmt.Printf("/%s", h.Flavour)
+					}
+					if h.Mode != "" {
+						fmt.Printf("/%s", h.Mode)
+					}
+					sourceColor := getSourceColor(h.Source)
+					fmt.Printf(" %s[%s]\033[0m", sourceColor, h.Source)
+					fmt.Printf(" - %s\n", formatTime(h.AppliedAt))
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&showHistory, "history", "H", false, "Show theme history")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
+	return cmd
+}
+
+// revertCommand creates the scheme revert subcommand
+func revertCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "revert",
+		Short: "Revert to the previous theme",
+		Long: `Revert to the previous theme from history.
+		
+This will restore the previously applied theme and remove it from the history.
+
+Example:
+  heimdall scheme revert  # Revert to previous theme`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			stateManager := theme.NewStateManager()
+
+			previous, err := stateManager.RevertToPrevious()
+			if err != nil {
+				return err
+			}
+
+			// Apply the previous theme
+			manager := scheme.NewManager()
+			prevScheme, err := manager.LoadScheme(previous.Name, previous.Flavour, previous.Mode)
+			if err != nil {
+				return fmt.Errorf("failed to load previous theme: %w", err)
+			}
+
+			if err := manager.SetScheme(prevScheme); err != nil {
+				return fmt.Errorf("failed to apply previous theme: %w", err)
+			}
+
+			fmt.Printf("Reverted to %s", previous.Name)
+			if previous.Flavour != "" {
+				fmt.Printf("/%s", previous.Flavour)
+			}
+			if previous.Mode != "" {
+				fmt.Printf("/%s", previous.Mode)
+			}
+			fmt.Printf("\n")
+
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+// preferencesCommand creates the scheme preferences subcommand
+func preferencesCommand() *cobra.Command {
+	var (
+		autoGenerated bool
+		autoUser      bool
+		autoBundled   bool
+		variant       string
+		mode          string
+		notify        bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "preferences",
+		Short: "Manage theme preferences",
+		Long: `Configure theme preferences including auto-apply behavior and defaults.
+
+Examples:
+  heimdall scheme preferences                          # Show current preferences
+  heimdall scheme preferences --auto-generated=true    # Enable auto-apply for generated themes
+  heimdall scheme preferences --variant=vibrant        # Set preferred variant
+  heimdall scheme preferences --mode=dark              # Set preferred mode`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			stateManager := theme.NewStateManager()
+
+			// Check if any flags were set
+			if cmd.Flags().Changed("auto-generated") ||
+				cmd.Flags().Changed("auto-user") ||
+				cmd.Flags().Changed("auto-bundled") ||
+				cmd.Flags().Changed("variant") ||
+				cmd.Flags().Changed("mode") ||
+				cmd.Flags().Changed("notify") {
+				// Update preferences
+				prefs := stateManager.GetPreferences()
+
+				if cmd.Flags().Changed("auto-generated") {
+					prefs.AutoApplyGenerated = autoGenerated
+				}
+				if cmd.Flags().Changed("auto-user") {
+					prefs.AutoApplyUser = autoUser
+				}
+				if cmd.Flags().Changed("auto-bundled") {
+					prefs.AutoApplyBundled = autoBundled
+				}
+				if variant != "" {
+					prefs.PreferredVariant = variant
+				}
+				if mode != "" {
+					prefs.PreferredMode = mode
+				}
+				if cmd.Flags().Changed("notify") {
+					prefs.NotifyOnGeneration = notify
+				}
+
+				if err := stateManager.UpdatePreferences(prefs); err != nil {
+					return fmt.Errorf("failed to update preferences: %w", err)
+				}
+
+				fmt.Println("Preferences updated successfully")
+			}
+
+			// Show current preferences
+			prefs := stateManager.GetPreferences()
+			fmt.Printf("\033[34;1mTheme Preferences\033[0m\n")
+			fmt.Printf("━━━━━━━━━━━━━━━━━\n")
+			fmt.Printf("Auto-apply generated:  %s\n", formatBool(prefs.AutoApplyGenerated))
+			fmt.Printf("Auto-apply user:       %s\n", formatBool(prefs.AutoApplyUser))
+			fmt.Printf("Auto-apply bundled:    %s\n", formatBool(prefs.AutoApplyBundled))
+			fmt.Printf("Preferred variant:     %s\n", prefs.PreferredVariant)
+			fmt.Printf("Preferred mode:        %s\n", prefs.PreferredMode)
+			fmt.Printf("Notify on generation:  %s\n", formatBool(prefs.NotifyOnGeneration))
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&autoGenerated, "auto-generated", false, "Auto-apply generated themes")
+	cmd.Flags().BoolVar(&autoUser, "auto-user", false, "Auto-apply user themes")
+	cmd.Flags().BoolVar(&autoBundled, "auto-bundled", false, "Auto-apply bundled themes")
+	cmd.Flags().StringVar(&variant, "variant", "", "Preferred variant (vibrant, tonal, etc.)")
+	cmd.Flags().StringVar(&mode, "mode", "", "Preferred mode (dark/light)")
+	cmd.Flags().BoolVar(&notify, "notify", true, "Notify when new theme is generated")
+
+	return cmd
+}
+
+// Helper functions
+
+func getSourceColor(source scheme.SchemeSource) string {
+	switch source {
+	case scheme.SourceUser:
+		return "\033[32m" // Green
+	case scheme.SourceGenerated:
+		return "\033[33m" // Yellow
+	case scheme.SourceBundled:
+		return "\033[36m" // Cyan
+	default:
+		return ""
+	}
+}
+
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+
+	duration := time.Since(t)
+	if duration < time.Minute {
+		return "just now"
+	} else if duration < time.Hour {
+		return fmt.Sprintf("%d minutes ago", int(duration.Minutes()))
+	} else if duration < 24*time.Hour {
+		return fmt.Sprintf("%d hours ago", int(duration.Hours()))
+	} else {
+		return fmt.Sprintf("%d days ago", int(duration.Hours()/24))
+	}
+}
+
+func formatBool(b bool) string {
+	if b {
+		return "\033[32m✓\033[0m"
+	}
+	return "\033[31m✗\033[0m"
+}
+
+func outputJSON(v interface{}) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}

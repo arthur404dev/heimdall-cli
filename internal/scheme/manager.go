@@ -9,19 +9,30 @@ import (
 	"strings"
 
 	"github.com/arthur404dev/heimdall-cli/assets/schemes"
+	"github.com/arthur404dev/heimdall-cli/internal/config"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 )
 
-// Scheme represents a color scheme (aligned with caelestia format)
+// SchemeSource represents where a scheme comes from
+type SchemeSource string
+
+const (
+	SourceBundled   SchemeSource = "bundled"
+	SourceUser      SchemeSource = "user"
+	SourceGenerated SchemeSource = "generated"
+)
+
+// Scheme represents a color scheme
 type Scheme struct {
 	Name    string            `json:"name"`
 	Flavour string            `json:"flavour"`
 	Mode    string            `json:"mode"`
 	Variant string            `json:"variant"`
 	Colours map[string]string `json:"colours"` // British spelling, simple strings
+	Source  SchemeSource      `json:"-"`       // Not persisted, runtime only
 }
 
-// Manager manages color schemes with caelestia's simple approach
+// Manager manages color schemes
 type Manager struct {
 	schemesDir string
 	stateDir   string
@@ -29,10 +40,58 @@ type Manager struct {
 
 // NewManager creates a new scheme manager
 func NewManager() *Manager {
-	return &Manager{
-		schemesDir: paths.SchemeDataDir,
+	m := &Manager{
+		schemesDir: paths.SchemeDataDir, // Default, will be overridden
 		stateDir:   paths.StateDir,
 	}
+
+	// Use configured generated path if available
+	m.schemesDir = m.getGeneratedSchemePath()
+
+	return m
+}
+
+// getUserSchemePaths returns the configured user scheme paths
+func (m *Manager) getUserSchemePaths() []string {
+	cfg := config.Get()
+	if cfg == nil || len(cfg.Scheme.UserPaths) == 0 {
+		// Return default if config not loaded or no paths configured
+		return []string{paths.UserSchemeDir}
+	}
+
+	// Expand ~ to home directory for each path
+	expandedPaths := make([]string, 0, len(cfg.Scheme.UserPaths))
+	for _, p := range cfg.Scheme.UserPaths {
+		if strings.HasPrefix(p, "~/") {
+			home, err := os.UserHomeDir()
+			if err == nil {
+				p = filepath.Join(home, p[2:])
+			}
+		}
+		expandedPaths = append(expandedPaths, p)
+	}
+
+	return expandedPaths
+}
+
+// getGeneratedSchemePath returns the configured generated scheme path
+func (m *Manager) getGeneratedSchemePath() string {
+	cfg := config.Get()
+	if cfg == nil || cfg.Scheme.GeneratedPath == "" {
+		// Return default if config not loaded or no path configured
+		return paths.SchemeDataDir
+	}
+
+	// Expand ~ to home directory if needed
+	p := cfg.Scheme.GeneratedPath
+	if strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			p = filepath.Join(home, p[2:])
+		}
+	}
+
+	return p
 }
 
 // GetCurrent returns the current active scheme
@@ -42,7 +101,7 @@ func (m *Manager) GetCurrent() (*Scheme, error) {
 	data, err := os.ReadFile(statePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Return default scheme like caelestia
+			// Return default scheme
 			return &Scheme{
 				Name:    "catppuccin",
 				Flavour: "mocha",
@@ -59,18 +118,31 @@ func (m *Manager) GetCurrent() (*Scheme, error) {
 		return nil, fmt.Errorf("failed to parse current scheme: %w", err)
 	}
 
+	// Normalize colors to ensure consistency (remove # prefix if present)
+	// This handles cases where the state file might have inconsistent formats
+	for key, value := range scheme.Colours {
+		scheme.Colours[key] = strings.TrimPrefix(value, "#")
+	}
+
 	return &scheme, nil
 }
 
 // SetScheme sets the active scheme with triple-write for QuickShell integration
 func (m *Manager) SetScheme(scheme *Scheme) error {
-	// Prepare Heimdall format data (with # prefix on colors)
+	// Normalize colors to ensure they don't have # prefix internally
+	// This ensures consistency regardless of source
+	normalizedColors := make(map[string]string)
+	for key, value := range scheme.Colours {
+		normalizedColors[key] = strings.TrimPrefix(value, "#")
+	}
+
+	// Prepare Heimdall format data (colors stored without # prefix)
 	heimdallScheme := &Scheme{
 		Name:    scheme.Name,
 		Flavour: scheme.Flavour,
 		Mode:    scheme.Mode,
 		Variant: scheme.Variant,
-		Colours: scheme.Colours, // Already has # prefix
+		Colours: normalizedColors,
 	}
 
 	// 1. Primary write to Heimdall config location
@@ -82,7 +154,7 @@ func (m *Manager) SetScheme(scheme *Scheme) error {
 		return fmt.Errorf("failed to write config scheme: %w", err)
 	}
 
-	// 2. Secondary write to Heimdall state location (matching Caelestia pattern)
+	// 2. Secondary write to Heimdall state location
 	statePath := filepath.Join(m.stateDir, "scheme.json")
 	if err := paths.EnsureDir(m.stateDir); err != nil {
 		return fmt.Errorf("failed to create state directory: %w", err)
@@ -92,8 +164,7 @@ func (m *Manager) SetScheme(scheme *Scheme) error {
 	}
 
 	// 3. CRITICAL: QuickShell-specific format (no # prefix, "colours" key)
-	// This bridges the gap that Caelestia missed!
-	quickshellScheme := m.prepareQuickShellFormat(scheme)
+	quickshellScheme := m.prepareQuickShellFormat(heimdallScheme)
 	quickshellDir := filepath.Join(os.Getenv("HOME"), ".local", "state", "quickshell", "user", "generated")
 
 	// Create QuickShell directory if it doesn't exist
@@ -109,7 +180,7 @@ func (m *Manager) SetScheme(scheme *Scheme) error {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to write QuickShell colors: %v\n", err)
 	} else {
 		// Log success for QuickShell integration
-		fmt.Fprintf(os.Stderr, "Info: Updated QuickShell colors (bridging Caelestia gap) at %s\n", quickshellPath)
+		fmt.Fprintf(os.Stderr, "Info: Updated QuickShell colors at %s\n", quickshellPath)
 	}
 
 	return nil
@@ -146,7 +217,42 @@ func (m *Manager) prepareQuickShellFormat(scheme *Scheme) map[string]interface{}
 func (m *Manager) ListSchemes() ([]string, error) {
 	schemeMap := make(map[string]bool) // Use map to avoid duplicates
 
-	// First, add bundled schemes from embedded assets
+	// First, add user schemes from configured paths (higher priority)
+	userPaths := m.getUserSchemePaths()
+	for _, userPath := range userPaths {
+		entries, err := os.ReadDir(userPath)
+		if err != nil {
+			continue // Skip if directory doesn't exist
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				schemeMap[entry.Name()] = true
+			}
+		}
+	}
+
+	// Then, add schemes from filesystem directories (legacy locations)
+	schemeDirs := []string{
+		m.schemesDir, // Primary location (data dir)
+		filepath.Join(paths.SchemeCacheDir, "schemes"), // Legacy cache location with extra "schemes" level
+		paths.SchemeCacheDir,                           // Direct cache location
+	}
+
+	for _, schemeDir := range schemeDirs {
+		entries, err := os.ReadDir(schemeDir)
+		if err != nil {
+			continue // Skip if directory doesn't exist
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				schemeMap[entry.Name()] = true
+			}
+		}
+	}
+
+	// Finally, add bundled schemes from embedded assets (lowest priority)
 	err := fs.WalkDir(schemes.Content, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -169,26 +275,6 @@ func (m *Manager) ListSchemes() ([]string, error) {
 		return nil, fmt.Errorf("failed to walk embedded schemes: %w", err)
 	}
 
-	// Then, add user schemes from filesystem directories
-	schemeDirs := []string{
-		m.schemesDir, // Primary location (data dir)
-		filepath.Join(paths.SchemeCacheDir, "schemes"), // Legacy cache location with extra "schemes" level
-		paths.SchemeCacheDir,                           // Direct cache location
-	}
-
-	for _, schemeDir := range schemeDirs {
-		entries, err := os.ReadDir(schemeDir)
-		if err != nil {
-			continue // Skip if directory doesn't exist
-		}
-
-		for _, entry := range entries {
-			if entry.IsDir() {
-				schemeMap[entry.Name()] = true
-			}
-		}
-	}
-
 	// Convert map to slice
 	var schemesList []string
 	for scheme := range schemeMap {
@@ -202,7 +288,43 @@ func (m *Manager) ListSchemes() ([]string, error) {
 func (m *Manager) ListFlavours(schemeName string) ([]string, error) {
 	flavourMap := make(map[string]bool) // Use map to avoid duplicates
 
-	// First check embedded assets
+	// First check user scheme paths (highest priority)
+	userPaths := m.getUserSchemePaths()
+	for _, userPath := range userPaths {
+		schemePath := filepath.Join(userPath, schemeName)
+		entries, err := os.ReadDir(schemePath)
+		if err != nil {
+			continue // Skip if directory doesn't exist
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				flavourMap[entry.Name()] = true
+			}
+		}
+	}
+
+	// Then check filesystem locations
+	schemePaths := []string{
+		filepath.Join(m.schemesDir, schemeName),                    // Primary location (data dir)
+		filepath.Join(paths.SchemeCacheDir, "schemes", schemeName), // Legacy cache location with extra "schemes" level
+		filepath.Join(paths.SchemeCacheDir, schemeName),            // Direct cache location
+	}
+
+	for _, schemePath := range schemePaths {
+		entries, err := os.ReadDir(schemePath)
+		if err != nil {
+			continue // Skip if directory doesn't exist
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				flavourMap[entry.Name()] = true
+			}
+		}
+	}
+
+	// Finally check embedded assets (lowest priority)
 	err := fs.WalkDir(schemes.Content, schemeName, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // Skip if scheme doesn't exist in embedded assets
@@ -225,26 +347,6 @@ func (m *Manager) ListFlavours(schemeName string) ([]string, error) {
 	// Ignore errors from embedded assets walk (scheme might not exist there)
 	_ = err
 
-	// Then check filesystem locations
-	schemePaths := []string{
-		filepath.Join(m.schemesDir, schemeName),                    // Primary location (data dir)
-		filepath.Join(paths.SchemeCacheDir, "schemes", schemeName), // Legacy cache location with extra "schemes" level
-		filepath.Join(paths.SchemeCacheDir, schemeName),            // Direct cache location
-	}
-
-	for _, schemePath := range schemePaths {
-		entries, err := os.ReadDir(schemePath)
-		if err != nil {
-			continue // Skip if directory doesn't exist
-		}
-
-		for _, entry := range entries {
-			if entry.IsDir() {
-				flavourMap[entry.Name()] = true
-			}
-		}
-	}
-
 	if len(flavourMap) == 0 {
 		return nil, fmt.Errorf("no flavours found for scheme %s", schemeName)
 	}
@@ -262,13 +364,18 @@ func (m *Manager) ListFlavours(schemeName string) ([]string, error) {
 func (m *Manager) ListModes(schemeName, flavour string) ([]string, error) {
 	modeMap := make(map[string]bool) // Use map to avoid duplicates
 
-	// First check embedded assets
-	embeddedPath := filepath.Join(schemeName, flavour)
-	entries, err := fs.ReadDir(schemes.Content, embeddedPath)
-	if err == nil {
+	// First check user scheme paths (highest priority)
+	userPaths := m.getUserSchemePaths()
+	for _, userPath := range userPaths {
+		flavourPath := filepath.Join(userPath, schemeName, flavour)
+		entries, err := os.ReadDir(flavourPath)
+		if err != nil {
+			continue // Skip if directory doesn't exist
+		}
+
 		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".txt") {
-				mode := strings.TrimSuffix(entry.Name(), ".txt")
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+				mode := strings.TrimSuffix(entry.Name(), ".json")
 				modeMap[mode] = true
 			}
 		}
@@ -295,6 +402,18 @@ func (m *Manager) ListModes(schemeName, flavour string) ([]string, error) {
 		}
 	}
 
+	// Finally check embedded assets (lowest priority)
+	embeddedPath := filepath.Join(schemeName, flavour)
+	entries, err := fs.ReadDir(schemes.Content, embeddedPath)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+				mode := strings.TrimSuffix(entry.Name(), ".json")
+				modeMap[mode] = true
+			}
+		}
+	}
+
 	if len(modeMap) == 0 {
 		return nil, fmt.Errorf("no modes found for flavour %s/%s", schemeName, flavour)
 	}
@@ -310,59 +429,117 @@ func (m *Manager) ListModes(schemeName, flavour string) ([]string, error) {
 
 // LoadScheme loads a specific scheme
 func (m *Manager) LoadScheme(name, flavour, mode string) (*Scheme, error) {
-	// Try multiple locations for scheme files
-	schemePaths := []string{
-		// Primary location (data dir)
-		filepath.Join(m.schemesDir, name, flavour, mode+".json"),
-		// Legacy cache location with extra "schemes" level
-		filepath.Join(paths.SchemeCacheDir, "schemes", name, flavour, mode+".json"),
-		// Direct cache location
-		filepath.Join(paths.SchemeCacheDir, name, flavour, mode+".json"),
-	}
-
 	var data []byte
 	var err error
+	var source SchemeSource
 
-	// First try loading from disk (existing behavior)
-	for _, schemePath := range schemePaths {
+	// First try user scheme paths (highest priority)
+	userPaths := m.getUserSchemePaths()
+	for _, userPath := range userPaths {
+		schemePath := filepath.Join(userPath, name, flavour, mode+".json")
 		data, err = os.ReadFile(schemePath)
 		if err == nil {
-			// Parse JSON format from disk
-			scheme := &Scheme{
-				Name:    name,
-				Flavour: flavour,
-				Mode:    mode,
-				Colours: make(map[string]string),
+			// Determine source based on path location
+			generatedPath := m.getGeneratedSchemePath()
+			if strings.HasPrefix(schemePath, generatedPath) {
+				source = SourceGenerated
+			} else {
+				source = SourceUser
 			}
-
-			// Parse JSON directly into a map to handle flexible formats
-			var rawData map[string]interface{}
-			if err := json.Unmarshal(data, &rawData); err != nil {
-				return nil, fmt.Errorf("failed to parse scheme JSON: %w", err)
-			}
-
-			// Extract colours (handle both British and American spelling)
-			if colours, ok := rawData["colours"].(map[string]interface{}); ok {
-				for key, value := range colours {
-					if colorStr, ok := value.(string); ok {
-						scheme.Colours[key] = strings.TrimPrefix(colorStr, "#")
-					}
-				}
-			} else if colors, ok := rawData["colors"].(map[string]interface{}); ok {
-				for key, value := range colors {
-					if colorStr, ok := value.(string); ok {
-						scheme.Colours[key] = strings.TrimPrefix(colorStr, "#")
-					}
-				}
-			}
-
-			// Extract variant if present
-			if variant, ok := rawData["variant"].(string); ok {
-				scheme.Variant = variant
-			}
-
-			return scheme, nil
+			break
 		}
+	}
+
+	// Then try other filesystem locations
+	if data == nil {
+		schemePaths := []string{
+			// Primary location (data dir)
+			filepath.Join(m.schemesDir, name, flavour, mode+".json"),
+			// Skip cache locations - they have old format
+		}
+
+		for _, schemePath := range schemePaths {
+			data, err = os.ReadFile(schemePath)
+			if err == nil {
+				// Determine source based on path location
+				generatedPath := m.getGeneratedSchemePath()
+				if strings.HasPrefix(schemePath, generatedPath) {
+					source = SourceGenerated
+				} else {
+					source = SourceUser
+				}
+				break
+			}
+		}
+	}
+
+	// If found on disk, parse it
+	if data != nil {
+		// Parse JSON format from disk
+		scheme := &Scheme{
+			Name:    name,
+			Flavour: flavour,
+			Mode:    mode,
+			Colours: make(map[string]string),
+			Source:  source,
+		}
+
+		// Parse JSON directly into a map to handle flexible formats
+		var rawData map[string]interface{}
+		if err := json.Unmarshal(data, &rawData); err != nil {
+			// Try to provide a more helpful error message
+			if validationErr, ok := err.(*ValidationError); ok {
+				return nil, validationErr
+			}
+			return nil, fmt.Errorf("failed to parse scheme JSON: %w", err)
+		}
+
+		// Extract colours (handle both British and American spelling)
+		if colours, ok := rawData["colours"].(map[string]interface{}); ok {
+			for key, value := range colours {
+				if colorStr, ok := value.(string); ok {
+					scheme.Colours[key] = strings.TrimPrefix(colorStr, "#")
+				}
+			}
+		} else if colors, ok := rawData["colors"].(map[string]interface{}); ok {
+			for key, value := range colors {
+				if colorStr, ok := value.(string); ok {
+					scheme.Colours[key] = strings.TrimPrefix(colorStr, "#")
+				}
+			}
+		}
+
+		// Extract variant if present
+		if variant, ok := rawData["variant"].(string); ok {
+			scheme.Variant = variant
+		}
+
+		// Always use the detected source based on file location
+		// The source should be determined by WHERE the file is, not what's IN the file
+		scheme.Source = source
+
+		// Validate ALL loaded schemes regardless of source
+		// All schemes should meet the same standards
+		// Sanitize first to fix common issues
+		SanitizeScheme(scheme)
+
+		// Then validate
+		if err := ValidateScheme(scheme); err != nil {
+			// Log the validation error but don't fail - allow partial schemes
+			// This is more user-friendly for all schemes
+			if validationErrs, ok := err.(ValidationErrors); ok && len(validationErrs) > 0 {
+				// Only fail on critical errors (missing colors map)
+				for _, vErr := range validationErrs {
+					if vErr.Field == "colours" && strings.Contains(vErr.Message, "colors map is required") {
+						return nil, fmt.Errorf("invalid scheme %s: %w", name, err)
+					}
+				}
+				// For non-critical errors, just log them (in production, you'd use a logger)
+				// fmt.Printf("Warning: Scheme %s has validation issues: %v\n", name, err)
+			}
+		}
+
+		return scheme, nil
 	}
 
 	// If not found on disk, try loading from embedded assets
@@ -375,6 +552,9 @@ func (m *Manager) LoadScheme(name, flavour, mode string) (*Scheme, error) {
 		if err := json.Unmarshal(embeddedData, &scheme); err != nil {
 			return nil, fmt.Errorf("failed to parse embedded scheme JSON: %w", err)
 		}
+
+		// Source is always bundled for embedded schemes
+		scheme.Source = SourceBundled
 
 		// Ensure colors don't have # prefix in storage (add it when needed)
 		for key, value := range scheme.Colours {
@@ -394,6 +574,7 @@ func (m *Manager) LoadScheme(name, flavour, mode string) (*Scheme, error) {
 			Flavour: flavour,
 			Mode:    mode,
 			Colours: make(map[string]string),
+			Source:  SourceBundled,
 		}
 
 		// Parse the space-separated format
@@ -427,6 +608,19 @@ func (m *Manager) SaveScheme(scheme *Scheme) error {
 		return fmt.Errorf("failed to create scheme directory: %w", err)
 	}
 
+	// Safety-net: Ensure source is set when saving
+	if scheme.Source == "" {
+		// Determine source based on save location
+		// If saving to the generated directory, it's a generated scheme
+		// Otherwise it's a user scheme
+		generatedPath := m.getGeneratedSchemePath()
+		if m.schemesDir == generatedPath {
+			scheme.Source = SourceGenerated
+		} else {
+			scheme.Source = SourceUser
+		}
+	}
+
 	// Write scheme file
 	filePath := filepath.Join(schemePath, scheme.Mode+".json")
 	if err := paths.AtomicWriteJSON(filePath, scheme); err != nil {
@@ -436,9 +630,72 @@ func (m *Manager) SaveScheme(scheme *Scheme) error {
 	return nil
 }
 
+// SaveSchemeToUser saves a scheme to the user schemes directory
+func (m *Manager) SaveSchemeToUser(scheme *Scheme) error {
+	// Get the first user path (default)
+	userPaths := m.getUserSchemePaths()
+	if len(userPaths) == 0 {
+		return fmt.Errorf("no user scheme paths configured")
+	}
+
+	userPath := userPaths[0]
+	schemePath := filepath.Join(userPath, scheme.Name, scheme.Flavour)
+
+	// Ensure directory exists
+	if err := paths.EnsureDir(schemePath); err != nil {
+		return fmt.Errorf("failed to create user scheme directory: %w", err)
+	}
+
+	// Safety-net: Ensure source is set to user when saving to user directory
+	if scheme.Source == "" {
+		scheme.Source = SourceUser
+	}
+
+	// Write scheme file
+	filePath := filepath.Join(schemePath, scheme.Mode+".json")
+	if err := paths.AtomicWriteJSON(filePath, scheme); err != nil {
+		return fmt.Errorf("failed to write user scheme file: %w", err)
+	}
+
+	return nil
+}
+
 // GetColors returns the colors of a scheme as a simple string map
 func (s *Scheme) GetColors() map[string]string {
 	return s.Colours
+}
+
+// GetSchemeSource determines the source of a scheme by checking where it exists
+func (m *Manager) GetSchemeSource(schemeName string) SchemeSource {
+	// Check user paths first (highest priority)
+	userPaths := m.getUserSchemePaths()
+	for _, userPath := range userPaths {
+		schemePath := filepath.Join(userPath, schemeName)
+		if paths.IsDir(schemePath) {
+			return SourceUser
+		}
+	}
+
+	// Check data directory (generated schemes location)
+	schemePath := filepath.Join(m.schemesDir, schemeName)
+	if paths.IsDir(schemePath) {
+		// If it's in the data directory, it's a generated scheme
+		// The data directory is specifically for generated schemes
+		return SourceGenerated
+	}
+
+	// Check if it exists in embedded assets
+	entries, err := fs.ReadDir(schemes.Content, ".")
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() && entry.Name() == schemeName {
+				return SourceBundled
+			}
+		}
+	}
+
+	// Default to bundled if not found (shouldn't happen)
+	return SourceBundled
 }
 
 // getDefaultColours returns default catppuccin mocha colors

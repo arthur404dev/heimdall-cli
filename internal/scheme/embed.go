@@ -134,6 +134,33 @@ func (m *Manager) InstallBundledScheme(name string) error {
 	return m.SaveScheme(scheme)
 }
 
+// InstallBundledSchemeToUser installs a bundled scheme to the user scheme directory
+func (m *Manager) InstallBundledSchemeToUser(name string) error {
+	bundled, err := GetBundledScheme(name)
+	if err != nil {
+		return err
+	}
+
+	// Convert BundledScheme to Scheme
+	scheme := &Scheme{
+		Name:    bundled.Family,
+		Flavour: bundled.Flavour,
+		Mode:    bundled.Variant, // dark or light
+		Variant: bundled.Variant,
+		Colours: make(map[string]string),
+	}
+
+	// Convert color strings (remove # prefix if present)
+	for key, hexColor := range bundled.Colors {
+		// Remove # prefix if present
+		hexColor = strings.TrimPrefix(hexColor, "#")
+		scheme.Colours[key] = hexColor
+	}
+
+	// Save the scheme to user directory
+	return m.SaveSchemeToUser(scheme)
+}
+
 // InstallAllBundledSchemes installs all bundled schemes
 func (m *Manager) InstallAllBundledSchemes() error {
 	schemes, err := GetBundledSchemes()
@@ -143,6 +170,22 @@ func (m *Manager) InstallAllBundledSchemes() error {
 
 	for _, scheme := range schemes {
 		if err := m.InstallBundledScheme(scheme.Name); err != nil {
+			return fmt.Errorf("failed to install scheme %s: %w", scheme.Name, err)
+		}
+	}
+
+	return nil
+}
+
+// InstallAllBundledSchemesToUser installs all bundled schemes to user directory
+func (m *Manager) InstallAllBundledSchemesToUser() error {
+	schemes, err := GetBundledSchemes()
+	if err != nil {
+		return err
+	}
+
+	for _, scheme := range schemes {
+		if err := m.InstallBundledSchemeToUser(scheme.Name); err != nil {
 			return fmt.Errorf("failed to install scheme %s: %w", scheme.Name, err)
 		}
 	}

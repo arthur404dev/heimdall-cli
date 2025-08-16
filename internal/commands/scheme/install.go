@@ -11,7 +11,8 @@ import (
 // installCommand creates the scheme install subcommand
 func installCommand() *cobra.Command {
 	var (
-		all bool
+		all     bool
+		userDir bool
 	)
 
 	cmd := &cobra.Command{
@@ -35,11 +36,24 @@ Examples:
 
 			// Install all bundled schemes
 			if all {
-				fmt.Println("Installing all bundled schemes...")
-				if err := manager.InstallAllBundledSchemes(); err != nil {
+				location := "data directory"
+				if userDir {
+					location = "user directory"
+				}
+
+				fmt.Printf("Installing all bundled schemes to %s...\n", location)
+
+				var err error
+				if userDir {
+					err = manager.InstallAllBundledSchemesToUser()
+				} else {
+					err = manager.InstallAllBundledSchemes()
+				}
+
+				if err != nil {
 					return fmt.Errorf("failed to install bundled schemes: %w", err)
 				}
-				fmt.Println("Successfully installed all bundled schemes")
+				fmt.Printf("Successfully installed all bundled schemes to %s\n", location)
 				return nil
 			}
 
@@ -68,17 +82,34 @@ Examples:
 			}
 
 			schemeName := strings.Join(args, " ")
-			fmt.Printf("Installing scheme: %s\n", schemeName)
-			if err := manager.InstallBundledScheme(schemeName); err != nil {
+
+			// Determine installation location
+			location := "data directory"
+			if userDir {
+				location = "user directory"
+			}
+
+			fmt.Printf("Installing scheme: %s to %s\n", schemeName, location)
+
+			// Install to appropriate location
+			var err error
+			if userDir {
+				err = manager.InstallBundledSchemeToUser(schemeName)
+			} else {
+				err = manager.InstallBundledScheme(schemeName)
+			}
+
+			if err != nil {
 				return fmt.Errorf("failed to install scheme: %w", err)
 			}
-			fmt.Printf("Successfully installed %s\n", schemeName)
+			fmt.Printf("Successfully installed %s to %s\n", schemeName, location)
 
 			return nil
 		},
 	}
 
 	cmd.Flags().BoolVar(&all, "all", false, "Install all bundled schemes")
+	cmd.Flags().BoolVar(&userDir, "user", false, "Install to user scheme directory")
 
 	return cmd
 }

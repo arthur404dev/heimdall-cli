@@ -12,11 +12,14 @@ func Command() *cobra.Command {
 		Long: `Manage color schemes for theming.
 		
 Available subcommands:
-  list    - List available schemes, flavours, or modes
-  get     - Get current scheme or specific property
-  set     - Set the active scheme
-  install - Install bundled color schemes
-  bundled - Show bundled schemes with details`,
+  list        - List available schemes, flavours, or modes
+  get         - Get current scheme or specific property
+  set         - Set the active scheme
+  install     - Install bundled color schemes
+  bundled     - Show bundled schemes with details
+  status      - Show current theme status and state
+  revert      - Revert to the previous theme
+  preferences - Manage theme preferences`,
 	}
 
 	// Add subcommands
@@ -25,6 +28,9 @@ Available subcommands:
 	cmd.AddCommand(setCommand())
 	cmd.AddCommand(installCommand())
 	cmd.AddCommand(bundledCommand())
+	cmd.AddCommand(statusCommand())
+	cmd.AddCommand(revertCommand())
+	cmd.AddCommand(preferencesCommand())
 
 	return cmd
 }

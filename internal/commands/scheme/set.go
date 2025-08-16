@@ -68,7 +68,7 @@ Examples:
 				return setRandomScheme(manager, !noApply, enableNotify, selectedApps, dryRun)
 			}
 
-			// Handle caelestia-compatible flags
+			// Handle compatibility flags
 			if setName != "" || setFlavour != "" || setMode != "" || setVariant != "" {
 				return setSchemeByFlags(manager, setName, setFlavour, setMode, setVariant, !noApply, enableNotify, selectedApps, dryRun)
 			}
@@ -122,6 +122,16 @@ Examples:
 			if err := manager.SetScheme(newScheme); err != nil {
 				return fmt.Errorf("failed to set scheme: %w", err)
 			}
+
+			// Update theme state
+			stateManager := theme.NewStateManager()
+			stateManager.SetCurrent(theme.CurrentTheme{
+				Name:    schemeName,
+				Flavour: flavour,
+				Mode:    mode,
+				Variant: setVariant,
+				Source:  newScheme.Source,
+			})
 
 			logger.Info("Scheme set",
 				"scheme", schemeName,
@@ -220,6 +230,7 @@ func applyThemeWithOptions(s *scheme.Scheme, selectedApps []string) error {
 			"kitty":     true,
 			"alacritty": true,
 			"wezterm":   true,
+			"nvim":      true,
 		}
 
 		for _, app := range selectedApps {
@@ -257,12 +268,16 @@ func applyThemeWithOptions(s *scheme.Scheme, selectedApps []string) error {
 		if cfg.Theme.EnableWezterm {
 			apps = append(apps, "wezterm")
 		}
+		if cfg.Theme.EnableNvim {
+			apps = append(apps, "nvim")
+		}
 		// Terminal sequences are always applied unless explicitly disabled
 		apps = append(apps, "terminal")
 	}
 
 	// Apply theme to each app
 	var errors []string
+	var kittyThemed bool
 	for _, app := range apps {
 		if app == "terminal" {
 			// Special handling for terminal sequences
@@ -278,7 +293,18 @@ func applyThemeWithOptions(s *scheme.Scheme, selectedApps []string) error {
 				logger.Error("Failed to apply theme", "app", app, "error", err)
 			} else {
 				logger.Info("Applied theme", "app", app)
+				if app == "kitty" {
+					kittyThemed = true
+				}
 			}
+		}
+	}
+
+	// Reload kitty instances if kitty was themed
+	if kittyThemed {
+		if err := theme.ReloadKittyInstances(); err != nil {
+			logger.Error("Failed to reload kitty instances", "error", err)
+			// Don't add to errors list as this is non-critical
 		}
 	}
 
@@ -320,6 +346,7 @@ func performDryRun(s *scheme.Scheme, selectedApps []string) error {
 			"kitty":     true,
 			"alacritty": true,
 			"wezterm":   true,
+			"nvim":      true,
 		}
 
 		for _, app := range selectedApps {
@@ -356,6 +383,9 @@ func performDryRun(s *scheme.Scheme, selectedApps []string) error {
 		}
 		if cfg.Theme.EnableWezterm {
 			apps = append(apps, "wezterm")
+		}
+		if cfg.Theme.EnableNvim {
+			apps = append(apps, "nvim")
 		}
 		apps = append(apps, "terminal")
 	}
