@@ -13,8 +13,12 @@ import (
 	"strings"
 	"time"
 
+	_ "golang.org/x/image/webp"
+
 	"github.com/arthur404dev/heimdall-cli/internal/config"
 	"github.com/arthur404dev/heimdall-cli/internal/scheme"
+	"github.com/arthur404dev/heimdall-cli/internal/scheme/generator"
+	"github.com/arthur404dev/heimdall-cli/internal/theme"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/hypr"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/material"
@@ -236,13 +240,13 @@ func printColorScheme(wallpaperPath string) error {
 		return fmt.Errorf("failed to generate scheme: %w", err)
 	}
 
-	// Create caelestia-compatible JSON output
+	// Create caelestia-compatible JSON output with full Heimdall scheme
 	output := map[string]interface{}{
 		"name":    "dynamic",
 		"flavour": "default",
 		"mode":    mode,
 		"variant": variant,
-		"colours": convertMaterialColorsToJSON(materialScheme),
+		"colours": convertMaterialColors(materialScheme), // Use the new comprehensive converter
 	}
 
 	// Output JSON
@@ -253,53 +257,6 @@ func printColorScheme(wallpaperPath string) error {
 
 	fmt.Println(string(jsonData))
 	return nil
-}
-
-// convertMaterialColorsToJSON converts Material You colors to caelestia JSON format
-func convertMaterialColorsToJSON(ms *material.Scheme) map[string]string {
-	colors := make(map[string]string)
-
-	// Map Material You colors to caelestia color names
-	colorMap := map[string]uint32{
-		"primary":              ms.Primary,
-		"onPrimary":            ms.OnPrimary,
-		"primaryContainer":     ms.PrimaryContainer,
-		"onPrimaryContainer":   ms.OnPrimaryContainer,
-		"secondary":            ms.Secondary,
-		"onSecondary":          ms.OnSecondary,
-		"secondaryContainer":   ms.SecondaryContainer,
-		"onSecondaryContainer": ms.OnSecondaryContainer,
-		"tertiary":             ms.Tertiary,
-		"onTertiary":           ms.OnTertiary,
-		"tertiaryContainer":    ms.TertiaryContainer,
-		"onTertiaryContainer":  ms.OnTertiaryContainer,
-		"error":                ms.Error,
-		"onError":              ms.OnError,
-		"errorContainer":       ms.ErrorContainer,
-		"onErrorContainer":     ms.OnErrorContainer,
-		"background":           ms.Background,
-		"onBackground":         ms.OnBackground,
-		"surface":              ms.Surface,
-		"onSurface":            ms.OnSurface,
-		"surfaceVariant":       ms.SurfaceVariant,
-		"onSurfaceVariant":     ms.OnSurfaceVariant,
-		"outline":              ms.Outline,
-		"outlineVariant":       ms.OutlineVariant,
-		"shadow":               ms.Shadow,
-		"scrim":                ms.Scrim,
-		"inverseSurface":       ms.InverseSurface,
-		"inverseOnSurface":     ms.InverseOnSurface,
-		"inversePrimary":       ms.InversePrimary,
-	}
-
-	for name, argb := range colorMap {
-		r := uint8((argb >> 16) & 0xFF)
-		g := uint8((argb >> 8) & 0xFF)
-		b := uint8(argb & 0xFF)
-		colors[name] = fmt.Sprintf("#%02x%02x%02x", r, g, b)
-	}
-
-	return colors
 }
 
 // setRandomWallpaperFromDir selects and sets a random wallpaper from a directory
@@ -488,6 +445,63 @@ func setWallpaper(wallpaperPath string, enableSmartMode bool) error {
 		if err := generateMaterialYouScheme(wallpaperPath); err != nil {
 			logger.Error("Failed to generate scheme", "error", err)
 		}
+
+		// Update state to indicate generated theme is available
+		stateManager := theme.NewStateManager()
+		stateManager.SetGeneratedAvailable(wallpaperPath, map[string]string{
+			"generated_at": time.Now().Format(time.RFC3339),
+		})
+
+		// Check if we should auto-apply
+		if stateManager.ShouldAutoApply(scheme.SourceGenerated) {
+			// Auto-apply the generated theme
+			schemeManager := scheme.NewManager()
+			prefs := stateManager.GetPreferences()
+
+			// Load the preferred variant
+			variant := prefs.PreferredVariant
+			if variant == "" {
+				variant = "tonal"
+			}
+			mode := prefs.PreferredMode
+			if mode == "" {
+				// Use detected mode
+				analyzer := wallpaper.NewAnalyzer()
+				mode, _ = analyzer.DetermineMode(wallpaperPath)
+				if mode == "" {
+					mode = "dark"
+				}
+			}
+
+			// Load and apply the generated scheme
+			generatedScheme, err := schemeManager.LoadScheme("generated", variant, mode)
+			if err == nil {
+				schemeManager.SetScheme(generatedScheme)
+
+				// Update state
+				stateManager.SetCurrent(theme.CurrentTheme{
+					Name:    "generated",
+					Flavour: variant,
+					Mode:    mode,
+					Source:  scheme.SourceGenerated,
+					Metadata: map[string]string{
+						"wallpaper": wallpaperPath,
+					},
+				})
+
+				logger.Info("Auto-applied generated theme", "variant", variant, "mode", mode)
+			}
+		} else {
+			// Notify that new theme is available but not auto-applied
+			if stateManager.GetPreferences().NotifyOnGeneration {
+				notifier := notify.NewNotifier()
+				notifier.Send(&notify.Notification{
+					Summary: "New Theme Available",
+					Body:    "Generated Material You theme from wallpaper. Use 'heimdall scheme set generated' to apply.",
+					Urgency: notify.UrgencyNormal,
+				})
+			}
+		}
 	}
 
 	// Send notification
@@ -538,9 +552,9 @@ func showWallpaperInfo(wallpaperPath string) error {
 	return nil
 }
 
-// generateMaterialYouScheme generates a Material You scheme from the wallpaper
+// generateMaterialYouScheme generates all Material You variants from the wallpaper
 func generateMaterialYouScheme(wallpaperPath string) error {
-	logger.Info("Generating Material You scheme from wallpaper")
+	logger.Info("Generating Material You schemes from wallpaper")
 
 	// Open image
 	file, err := os.Open(wallpaperPath)
@@ -555,52 +569,233 @@ func generateMaterialYouScheme(wallpaperPath string) error {
 		return fmt.Errorf("failed to decode image: %w", err)
 	}
 
-	// Generate Material You palette
-	generator := material.NewGenerator()
-	palette, err := generator.GenerateFromImage(img)
+	// Generate all Material You variants
+	wallpaperGen := generator.NewWallpaperGenerator()
+	variants, err := wallpaperGen.GenerateAllVariants(img, wallpaperPath)
 	if err != nil {
-		return fmt.Errorf("failed to generate palette: %w", err)
+		return fmt.Errorf("failed to generate variants: %w", err)
 	}
 
-	// Determine mode based on wallpaper
+	// Determine preferred mode based on wallpaper
 	analyzer := wallpaper.NewAnalyzer()
-	mode, err := analyzer.DetermineMode(wallpaperPath)
+	preferredMode, err := analyzer.DetermineMode(wallpaperPath)
 	if err != nil {
-		mode = "dark" // Default to dark
+		preferredMode = "dark" // Default to dark
 	}
 
-	// Create scheme
-	materialScheme, err := generator.GenerateScheme(palette.Seed, mode == "dark")
-	if err != nil {
-		return fmt.Errorf("failed to generate scheme: %w", err)
-	}
-
-	// Convert to our scheme format
-	newScheme := &scheme.Scheme{
-		Name:    "material-you",
-		Flavour: "generated",
-		Mode:    mode,
-		Variant: "wallpaper",
-		Colours: convertMaterialColors(materialScheme),
-	}
-
-	// Save and set the scheme
+	// Save all variants to user schemes directory
 	manager := scheme.NewManager()
-	if err := manager.SaveScheme(newScheme); err != nil {
-		return fmt.Errorf("failed to save scheme: %w", err)
+	generatedDir := filepath.Join(paths.ConfigDir, "schemes", "generated")
+
+	// Create generated directory if it doesn't exist
+	if err := os.MkdirAll(generatedDir, 0755); err != nil {
+		return fmt.Errorf("failed to create generated schemes directory: %w", err)
 	}
 
-	if err := manager.SetScheme(newScheme); err != nil {
-		return fmt.Errorf("failed to set scheme: %w", err)
+	// Save metadata
+	metadata := map[string]interface{}{
+		"version": "1.0",
+		"source": map[string]interface{}{
+			"wallpaper": wallpaperPath,
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+		"generation": map[string]interface{}{
+			"algorithm":     "enhanced-v2",
+			"detected_mode": preferredMode,
+		},
+		"variants": make(map[string]interface{}),
 	}
 
-	logger.Info("Material You scheme generated and applied")
+	// Save each variant
+	for key, variantScheme := range variants {
+		// Parse variant and mode from key (e.g., "vibrant/dark")
+		parts := strings.Split(key, "/")
+		if len(parts) != 2 {
+			continue
+		}
+		variant := parts[0]
+		mode := parts[1]
+
+		// Create variant directory
+		variantDir := filepath.Join(generatedDir, variant)
+		if err := os.MkdirAll(variantDir, 0755); err != nil {
+			logger.Error("Failed to create variant directory", "variant", variant, "error", err)
+			continue
+		}
+
+		// Save scheme file
+		schemeFile := filepath.Join(variantDir, mode+".json")
+		schemeData, err := json.MarshalIndent(variantScheme, "", "  ")
+		if err != nil {
+			logger.Error("Failed to marshal scheme", "variant", variant, "mode", mode, "error", err)
+			continue
+		}
+
+		if err := os.WriteFile(schemeFile, schemeData, 0644); err != nil {
+			logger.Error("Failed to save scheme", "variant", variant, "mode", mode, "error", err)
+			continue
+		}
+
+		// Add to metadata
+		if _, ok := metadata["variants"].(map[string]interface{})[variant]; !ok {
+			metadata["variants"].(map[string]interface{})[variant] = make(map[string]interface{})
+		}
+		metadata["variants"].(map[string]interface{})[variant].(map[string]interface{})[mode] = map[string]interface{}{
+			"path": schemeFile,
+		}
+
+		logger.Info("Saved variant", "variant", variant, "mode", mode)
+	}
+
+	// Save metadata file
+	metadataFile := filepath.Join(generatedDir, "metadata.json")
+	metadataData, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		logger.Error("Failed to marshal metadata", "error", err)
+	} else {
+		if err := os.WriteFile(metadataFile, metadataData, 0644); err != nil {
+			logger.Error("Failed to save metadata", "error", err)
+		}
+	}
+
+	// Set the preferred variant as active
+	// Default to "content" variant in preferred mode
+	preferredVariant := "content"
+	preferredKey := fmt.Sprintf("%s/%s", preferredVariant, preferredMode)
+
+	var activeScheme *scheme.Scheme
+
+	if preferredScheme, ok := variants[preferredKey]; ok {
+		// Use the preferred variant
+		activeScheme = preferredScheme
+	} else {
+		// Fallback: generate a single scheme using the old method
+		materialGen := material.NewGenerator()
+		palette, err := materialGen.GenerateFromImage(img)
+		if err != nil {
+			return fmt.Errorf("failed to generate palette: %w", err)
+		}
+
+		materialScheme, err := materialGen.GenerateScheme(palette.Seed, preferredMode == "dark")
+		if err != nil {
+			return fmt.Errorf("failed to generate scheme: %w", err)
+		}
+
+		// Convert to our scheme format
+		activeScheme = &scheme.Scheme{
+			Name:    "material-you",
+			Flavour: "generated",
+			Mode:    preferredMode,
+			Variant: "wallpaper",
+			Colours: convertMaterialColors(materialScheme),
+		}
+	}
+
+	// Save and set the active scheme
+	if err := manager.SaveScheme(activeScheme); err != nil {
+		logger.Error("Failed to save active scheme", "error", err)
+	}
+
+	if err := manager.SetScheme(activeScheme); err != nil {
+		logger.Error("Failed to set active scheme", "error", err)
+	}
+
+	// Apply theme to all applications (like scheme set does)
+	configDir := paths.ConfigDir
+	dataDir := paths.DataDir
+	applier := theme.NewApplier(configDir, dataDir)
+
+	// Get list of applications to theme
+	apps := []string{"gtk", "qt", "kitty", "alacritty", "wezterm", "nvim",
+		"discord", "btop", "fuzzel", "spicetify", "hyprland", "waybar",
+		"quickshell", "terminal"}
+
+	// Convert colors to map[string]string format (with # prefix)
+	colors := make(map[string]string)
+	for k, v := range activeScheme.Colours {
+		// Ensure colors have # prefix for applications
+		if !strings.HasPrefix(v, "#") {
+			colors[k] = "#" + v
+		} else {
+			colors[k] = v
+		}
+	}
+
+	// Apply to each application
+	var errors []string
+	kittyThemed := false
+
+	for _, app := range apps {
+		if app == "terminal" {
+			// Special handling for terminal sequences
+			if err := applier.ApplyTerminalSequences(colors, activeScheme.Name); err != nil {
+				errors = append(errors, fmt.Sprintf("terminal: %v", err))
+				logger.Error("Failed to apply terminal sequences", "error", err)
+			} else {
+				logger.Info("Applied terminal sequences")
+			}
+		} else {
+			if err := applier.ApplyTheme(app, colors, activeScheme.Mode); err != nil {
+				errors = append(errors, fmt.Sprintf("%s: %v", app, err))
+				logger.Error("Failed to apply theme", "app", app, "error", err)
+			} else {
+				logger.Info("Applied theme", "app", app)
+				if app == "kitty" {
+					kittyThemed = true
+				}
+			}
+		}
+	}
+
+	// Reload kitty instances if kitty was themed
+	if kittyThemed {
+		if err := theme.ReloadKittyInstances(); err != nil {
+			logger.Error("Failed to reload kitty instances", "error", err)
+		}
+	}
+
+	if len(errors) > 0 {
+		logger.Warn("Some applications failed to theme", "errors", strings.Join(errors, ", "))
+	}
+
+	logger.Info("Material You scheme generated and applied to all applications")
 
 	return nil
 }
 
-// convertMaterialColors converts Material You colors to our format
+// convertMaterialColors converts Material You colors to complete Heimdall format (122 colors)
 func convertMaterialColors(ms *material.Scheme) map[string]string {
+	// Use the new generator to create a full scheme
+	generator := generator.NewWallpaperGenerator()
+
+	// Determine if dark mode based on background luminance
+	isDark := isColorDark(argbToHex(ms.Background))
+	mode := "dark"
+	if !isDark {
+		mode = "light"
+	}
+
+	// Generate the full scheme
+	fullScheme, err := generator.GenerateFullScheme(ms, "", mode)
+	if err != nil {
+		// Fallback to basic conversion if generation fails
+		logger.Error("Failed to generate full scheme, using basic conversion", "error", err)
+		return convertMaterialColorsBasic(ms)
+	}
+
+	logger.Info("Successfully generated full scheme", "colorCount", len(fullScheme.Colours))
+
+	// Convert to format without # prefix for compatibility
+	colors := make(map[string]string)
+	for name, hex := range fullScheme.Colours {
+		colors[name] = strings.TrimPrefix(hex, "#")
+	}
+
+	return colors
+}
+
+// convertMaterialColorsBasic is the fallback basic conversion
+func convertMaterialColorsBasic(ms *material.Scheme) map[string]string {
 	colors := make(map[string]string)
 
 	// Map Material You colors to our color names
@@ -639,4 +834,29 @@ func convertMaterialColors(ms *material.Scheme) map[string]string {
 	}
 
 	return colors
+}
+
+// Helper functions for color conversion
+func argbToHex(argb uint32) string {
+	r := (argb >> 16) & 0xFF
+	g := (argb >> 8) & 0xFF
+	b := argb & 0xFF
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+}
+
+func isColorDark(hex string) bool {
+	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) != 6 {
+		return true // Default to dark
+	}
+
+	var rgb uint32
+	fmt.Sscanf(hex, "%06x", &rgb)
+	r := float64((rgb >> 16) & 0xFF)
+	g := float64((rgb >> 8) & 0xFF)
+	b := float64(rgb & 0xFF)
+
+	// Calculate perceived luminance
+	luminance := 0.299*r + 0.587*g + 0.114*b
+	return luminance < 128
 }
