@@ -40,7 +40,7 @@ PLATFORMS := linux/amd64 linux/arm64 linux/386 freebsd/amd64
 all: clean fmt lint test build
 
 # Build the binary
-build:
+build: generate-examples generate-docs
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
 	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
@@ -314,6 +314,21 @@ docs:
 	@$(GOCMD) doc -all > docs/API.md
 	@echo "Documentation generated: docs/API.md"
 
+# Generate example configuration files
+generate-examples:
+	@echo "Generating example configuration files..."
+	@$(GOCMD) run tools/generate_examples.go
+	@echo "Example configs generated in docs/examples/"
+
+# Generate documentation from struct tags
+generate-docs:
+	@echo "Generating configuration documentation..."
+	@$(GOCMD) run tools/generate_documentation.go
+	@echo "Documentation generated:"
+	@echo "  - docs/CONFIG_REFERENCE.md"
+	@echo "  - docs/CONFIG_QUICK_REFERENCE.md"
+	@echo "  - docs/examples/config-schema.json"
+
 # Show version information
 version:
 	@echo "Version: $(VERSION)"
@@ -376,6 +391,8 @@ help:
 	@echo "  deps         - Update dependencies"
 	@echo "  verify       - Verify dependencies"
 	@echo "  docs         - Generate documentation"
+	@echo "  generate-examples - Generate example configuration files"
+	@echo "  generate-docs- Generate configuration reference documentation"
 	@echo "  version      - Show version information"
 	@echo "  help         - Show this help message"
 	@echo ""

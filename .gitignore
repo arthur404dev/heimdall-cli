@@ -4,6 +4,8 @@ update_shell_config.sh
 /dist
 /heimdall
 heimdall
+*-test
+test_*
 *.exe
 *.dll
 *.so
