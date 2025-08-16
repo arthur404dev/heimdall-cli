@@ -25,6 +25,7 @@ Heimdall is a comprehensive command-line interface tool designed for managing yo
 - 🐚 **Shell Integration** - Interactive shell with IPC daemon
 - 😊 **Emoji Picker** - Quick emoji selection tool
 - 🖼️ **PiP Mode** - Picture-in-Picture support for applications
+- 🔄 **Self-Update** - Built-in update mechanism with rollback support
 - ⚙️ **Fully Configurable** - Extensive JSON configuration for all features
 
 ## Installation
@@ -263,6 +264,33 @@ heimdall pip
 # Enable PiP for specific application
 heimdall pip --app firefox
 ```
+
+### `update` - Self-Update
+
+Update heimdall to the latest version with built-in rollback support.
+
+```bash
+# Check for updates
+heimdall update --check
+
+# Update to latest version
+heimdall update
+
+# Update to beta channel
+heimdall update --channel beta
+
+# Rollback to previous version
+heimdall update --rollback
+```
+
+**Features:**
+- Multi-channel support (stable, beta, nightly)
+- Automatic update checks
+- Safe rollback capability
+- Git repository support for development
+- Checksum verification
+
+📚 **[Read the Update Guide](docs/UPDATE_GUIDE.md)** for detailed information.
 
 ## Configuration
 

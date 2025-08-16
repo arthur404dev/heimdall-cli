@@ -20,12 +20,6 @@ var (
 	HeimdallStateDir  string
 	HeimdallCacheDir  string
 
-	// Legacy Caelestia directories (for migration)
-	CaelestiaConfigDir string
-	CaelestiaDataDir   string
-	CaelestiaStateDir  string
-	CaelestiaCacheDir  string
-
 	// Specific paths
 	UserConfigPath         string
 	SchemeStatePath        string
@@ -41,6 +35,7 @@ var (
 	ThemeDir            string
 	SchemeDataDir       string
 	SchemeCacheDir      string
+	UserSchemeDir       string
 	WallpapersDir       string
 	WallpapersCacheDir  string
 	ScreenshotsDir      string
@@ -68,12 +63,6 @@ func init() {
 	HeimdallStateDir = filepath.Join(StateDir, "heimdall")
 	HeimdallCacheDir = filepath.Join(CacheDir, "heimdall")
 
-	// Initialize legacy Caelestia directories (for migration)
-	CaelestiaConfigDir = filepath.Join(ConfigDir, "caelestia")
-	CaelestiaDataDir = filepath.Join(DataDir, "caelestia")
-	CaelestiaStateDir = filepath.Join(StateDir, "caelestia")
-	CaelestiaCacheDir = filepath.Join(CacheDir, "caelestia")
-
 	// Initialize specific paths
 	UserConfigPath = filepath.Join(HeimdallConfigDir, "config.yaml")
 	SchemeStatePath = filepath.Join(HeimdallStateDir, "scheme.json")
@@ -89,6 +78,7 @@ func init() {
 	ThemeDir = filepath.Join(HeimdallStateDir, "theme")
 	SchemeDataDir = filepath.Join(HeimdallDataDir, "schemes")
 	SchemeCacheDir = filepath.Join(HeimdallCacheDir, "schemes")
+	UserSchemeDir = filepath.Join(HeimdallConfigDir, "schemes")
 	WallpapersDir = filepath.Join(PicturesDir, "Wallpapers")
 	WallpapersCacheDir = filepath.Join(HeimdallCacheDir, "wallpapers")
 	ScreenshotsDir = filepath.Join(PicturesDir, "Screenshots")

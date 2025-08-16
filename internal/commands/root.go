@@ -14,6 +14,7 @@ import (
 	"github.com/arthur404dev/heimdall-cli/internal/commands/screenshot"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/shell"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/toggle"
+	"github.com/arthur404dev/heimdall-cli/internal/commands/update"
 	"github.com/arthur404dev/heimdall-cli/internal/commands/wallpaper"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/logger"
 	"github.com/spf13/cobra"
@@ -79,6 +80,58 @@ func init() {
 	}
 	rootCmd.AddCommand(versionCmd)
 
+	// Add completion command for generating shell completions
+	completionCmd := &cobra.Command{
+		Use:   "completion [bash|zsh|fish|powershell]",
+		Short: "Generate shell completion script",
+		Long: `Generate shell completion script for heimdall.
+
+To load completions:
+
+Bash:
+  $ source <(heimdall completion bash)
+  # To load completions for each session, execute once:
+  # Linux:
+  $ heimdall completion bash > /etc/bash_completion.d/heimdall
+  # macOS:
+  $ heimdall completion bash > $(brew --prefix)/etc/bash_completion.d/heimdall
+
+Zsh:
+  $ source <(heimdall completion zsh)
+  # To load completions for each session, execute once:
+  $ heimdall completion zsh > "${fpath[1]}/_heimdall"
+
+Fish:
+  $ heimdall completion fish | source
+  # To load completions for each session, execute once:
+  $ heimdall completion fish > ~/.config/fish/completions/heimdall.fish
+
+PowerShell:
+  PS> heimdall completion powershell | Out-String | Invoke-Expression
+  # To load completions for every new session, run:
+  PS> heimdall completion powershell > heimdall.ps1
+  # and source this file from your PowerShell profile.
+`,
+		DisableFlagsInUseLine: true,
+		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
+		Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			switch args[0] {
+			case "bash":
+				return rootCmd.GenBashCompletionV2(os.Stdout, true)
+			case "zsh":
+				return rootCmd.GenZshCompletion(os.Stdout)
+			case "fish":
+				return rootCmd.GenFishCompletion(os.Stdout, true)
+			case "powershell":
+				return rootCmd.GenPowerShellCompletionWithDesc(os.Stdout)
+			default:
+				return fmt.Errorf("unsupported shell: %s", args[0])
+			}
+		},
+	}
+	rootCmd.AddCommand(completionCmd)
+
 	// Add commands
 	addCommands()
 }
@@ -117,6 +170,9 @@ func addCommands() {
 
 	// Add idle command
 	rootCmd.AddCommand(idle.Command())
+
+	// Add update command
+	rootCmd.AddCommand(update.NewUpdateCommand())
 }
 
 // initConfig reads in config file and ENV variables if set.
