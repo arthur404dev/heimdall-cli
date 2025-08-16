@@ -8,49 +8,23 @@ import (
 	"strings"
 )
 
-// Embedded default templates for each application
-
-//go:embed templates/discord.css.tmpl
-var embeddedDiscordTemplate string
-
-//go:embed templates/gtk.css.tmpl
-var embeddedGtkTemplate string
-
-//go:embed templates/qt.conf.tmpl
-var embeddedQtTemplate string
-
-//go:embed templates/btop.theme.tmpl
-var embeddedBtopTemplate string
-
-//go:embed templates/fuzzel.ini.tmpl
-var embeddedFuzzelTemplate string
-
-//go:embed templates/spicetify.ini.tmpl
-var embeddedSpicetifyTemplate string
-
-//go:embed templates/hyprland.conf.tmpl
-var embeddedHyprlandTemplate string
-
-//go:embed templates/terminal.sh.tmpl
-var embeddedTerminalTemplate string
-
-//go:embed templates/kitty.conf.tmpl
-var embeddedKittyTemplate string
-
-//go:embed templates/alacritty.toml.tmpl
-var embeddedAlacrittyTemplate string
-
-//go:embed templates/wezterm.lua.tmpl
-var embeddedWeztermTemplate string
-
-//go:embed templates/waybar.css.tmpl
-var embeddedWaybarTemplate string
-
-//go:embed templates/rofi.rasi.tmpl
-var embeddedRofiTemplate string
-
-//go:embed templates/dunst.conf.tmpl
-var embeddedDunstTemplate string
+// Template variables are now defined in the appthemes package
+// These variables are kept for backward compatibility but are no longer used
+var embeddedDiscordTemplate string = ""
+var embeddedGtkTemplate string = ""
+var embeddedQtTemplate string = ""
+var embeddedBtopTemplate string = ""
+var embeddedFuzzelTemplate string = ""
+var embeddedSpicetifyTemplate string = ""
+var embeddedHyprlandTemplate string = ""
+var embeddedTerminalTemplate string = ""
+var embeddedKittyTemplate string = ""
+var embeddedAlacrittyTemplate string = ""
+var embeddedWeztermTemplate string = ""
+var embeddedNvimTemplate string = ""
+var embeddedWaybarTemplate string = ""
+var embeddedRofiTemplate string = ""
+var embeddedDunstTemplate string = ""
 
 // TemplateRegistry manages embedded and custom templates
 type TemplateRegistry struct {
@@ -78,6 +52,7 @@ func NewTemplateRegistry(customDir string) *TemplateRegistry {
 			"kitty":     embeddedKittyTemplate,
 			"alacritty": embeddedAlacrittyTemplate,
 			"wezterm":   embeddedWeztermTemplate,
+			"nvim":      embeddedNvimTemplate,
 			"waybar":    embeddedWaybarTemplate,
 			"rofi":      embeddedRofiTemplate,
 			"dunst":     embeddedDunstTemplate,

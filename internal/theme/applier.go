@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
 	"sync"
 	"time"
 
 	"github.com/arthur404dev/heimdall-cli/internal/config"
 	"github.com/arthur404dev/heimdall-cli/internal/discord"
 	"github.com/arthur404dev/heimdall-cli/internal/terminal"
+	"github.com/arthur404dev/heimdall-cli/internal/theme/appthemes"
 	"github.com/arthur404dev/heimdall-cli/internal/utils/paths"
 )
 
@@ -53,30 +54,26 @@ func NewApplier(configDir, dataDir string) *Applier {
 
 // ApplyTheme applies a theme to a specific application
 func (a *Applier) ApplyTheme(app string, colors map[string]string, mode string) error {
-	// Special handling for Discord
+	// Special handling for Discord (uses Discord client manager)
 	if app == "discord" {
 		return a.ApplyDiscordThemes(colors)
 	}
 
-	// Load the template for the application
-	templatePath := filepath.Join(a.templateDir, app+".tmpl")
-
-	var templateContent string
-	// Check if template exists
-	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
-		// Try embedded templates
-		content, err := a.getEmbeddedTemplate(app)
-		if err != nil {
+	// Get template from registry
+	templateContent, err := appthemes.Get(app)
+	if err != nil {
+		// Try checking for custom template file as fallback
+		templatePath := filepath.Join(a.templateDir, app+".tmpl")
+		if _, statErr := os.Stat(templatePath); statErr == nil {
+			contentBytes, readErr := os.ReadFile(templatePath)
+			if readErr == nil {
+				templateContent = string(contentBytes)
+			} else {
+				return fmt.Errorf("template not found for %s: %w", app, err)
+			}
+		} else {
 			return fmt.Errorf("template not found for %s: %w", app, err)
 		}
-		templateContent = content
-	} else {
-		// Read template file
-		contentBytes, err := os.ReadFile(templatePath)
-		if err != nil {
-			return fmt.Errorf("failed to read template file %s: %w", templatePath, err)
-		}
-		templateContent = string(contentBytes)
 	}
 
 	// Render the template using simple string replacement
@@ -147,34 +144,49 @@ func (a *Applier) getHandler(name string) ApplicationHandler {
 
 // ApplyAllThemes applies themes to all supported applications
 func (a *Applier) ApplyAllThemes(colors map[string]string, mode string, schemeName string) error {
-	// Apply GTK theme
-	gtkHandler := NewGTKHandler()
-	if err := gtkHandler.Apply(colors, mode); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to apply GTK theme: %v\n", err)
+	// Special handlers that need custom logic
+	specialHandlers := map[string]func(map[string]string) error{
+		"discord": a.ApplyDiscordThemes,
 	}
 
-	// Apply Qt theme
-	qtHandler := NewQtHandler()
-	if err := qtHandler.Apply(colors, mode); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to apply Qt theme: %v\n", err)
+	// Mode-aware handlers
+	modeHandlers := map[string]func(map[string]string, string) error{
+		"gtk": func(c map[string]string, m string) error {
+			return NewGTKHandler().Apply(c, m)
+		},
+		"qt": func(c map[string]string, m string) error {
+			return NewQtHandler().Apply(c, m)
+		},
 	}
 
-	// Apply tool-specific themes
-	if err := a.ApplyBtopTheme(colors); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to apply btop theme: %v\n", err)
+	// Apply themes to all registered templates
+	for _, name := range appthemes.List() {
+		// Skip if handled by special or mode handlers
+		if _, isSpecial := specialHandlers[name]; isSpecial {
+			continue
+		}
+		if _, hasMode := modeHandlers[name]; hasMode {
+			continue
+		}
+
+		// Apply generic theme
+		if err := a.ApplyTheme(name, colors, mode); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to apply %s theme: %v\n", name, err)
+		}
 	}
 
-	if err := a.ApplyFuzzelTheme(colors); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to apply fuzzel theme: %v\n", err)
+	// Apply special handlers
+	for name, handler := range specialHandlers {
+		if err := handler(colors); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to apply %s theme: %v\n", name, err)
+		}
 	}
 
-	if err := a.ApplySpicetifyTheme(colors); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to apply spicetify theme: %v\n", err)
-	}
-
-	// Apply Discord themes to all detected clients
-	if err := a.ApplyDiscordThemes(colors); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to apply Discord themes: %v\n", err)
+	// Apply mode-aware handlers
+	for name, handler := range modeHandlers {
+		if err := handler(colors, mode); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to apply %s theme: %v\n", name, err)
+		}
 	}
 
 	// Generate and save terminal sequences
@@ -228,13 +240,13 @@ func (a *Applier) ApplyAllThemesParallel(ctx context.Context, colors map[string]
 			return qtHandler.Apply(colors, mode)
 		}},
 		{"btop", func() error {
-			return a.ApplyBtopTheme(colors)
+			return a.ApplyTheme("btop", colors, mode)
 		}},
 		{"fuzzel", func() error {
-			return a.ApplyFuzzelTheme(colors)
+			return a.ApplyTheme("fuzzel", colors, mode)
 		}},
 		{"spicetify", func() error {
-			return a.ApplySpicetifyTheme(colors)
+			return a.ApplyTheme("spicetify", colors, mode)
 		}},
 		{"discord", func() error {
 			return a.ApplyDiscordThemes(colors)
@@ -243,13 +255,16 @@ func (a *Applier) ApplyAllThemesParallel(ctx context.Context, colors map[string]
 			return a.ApplyTerminalSequences(colors, schemeName)
 		}},
 		{"kitty", func() error {
-			return a.ApplyKittyTheme(colors)
+			return a.ApplyTheme("kitty", colors, mode)
 		}},
 		{"alacritty", func() error {
-			return a.ApplyAlacrittyTheme(colors)
+			return a.ApplyTheme("alacritty", colors, mode)
 		}},
 		{"wezterm", func() error {
-			return a.ApplyWeztermTheme(colors)
+			return a.ApplyTheme("wezterm", colors, mode)
+		}},
+		{"nvim", func() error {
+			return a.ApplyTheme("nvim", colors, mode)
 		}},
 	}
 
@@ -375,180 +390,24 @@ func (a *Applier) ApplyDiscordThemes(colors map[string]string) error {
 	return clientManager.ApplyThemeToAll(colors, cssTemplate, betterDiscordTemplate)
 }
 
-// ApplyBtopTheme applies theme to btop
-func (a *Applier) ApplyBtopTheme(colors map[string]string) error {
-	content := a.generateBtopTheme(colors)
-	btopPath := a.GetOutputPath("btop")
-
-	// Ensure directory exists
-	dir := filepath.Dir(btopPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create btop themes directory: %w", err)
-	}
-
-	return paths.AtomicWrite(btopPath, []byte(content))
-}
-
-// ApplyFuzzelTheme applies theme to fuzzel
-func (a *Applier) ApplyFuzzelTheme(colors map[string]string) error {
-	content := a.generateFuzzelTheme(colors)
-	fuzzelPath := a.GetOutputPath("fuzzel")
-
-	// Ensure directory exists
-	dir := filepath.Dir(fuzzelPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create fuzzel directory: %w", err)
-	}
-
-	return paths.AtomicWrite(fuzzelPath, []byte(content))
-}
-
-// ApplySpicetifyTheme applies theme to Spicetify
-func (a *Applier) ApplySpicetifyTheme(colors map[string]string) error {
-	content := a.generateSpicetifyTheme(colors)
-	spicetifyPath := a.GetOutputPath("spicetify")
-
-	// Ensure directory exists
-	dir := filepath.Dir(spicetifyPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create spicetify themes directory: %w", err)
-	}
-
-	return paths.AtomicWrite(spicetifyPath, []byte(content))
-}
-
-// ApplyKittyTheme applies theme to Kitty terminal
-func (a *Applier) ApplyKittyTheme(colors map[string]string) error {
-	content, err := a.replacer.ReplaceTemplate(kittyTemplate, colors)
-	if err != nil {
-		return fmt.Errorf("failed to process kitty template: %w", err)
-	}
-
-	kittyPath := a.GetOutputPath("kitty")
-
-	// Ensure directory exists
-	dir := filepath.Dir(kittyPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create kitty themes directory: %w", err)
-	}
-
-	return paths.AtomicWrite(kittyPath, []byte(content))
-}
-
-// ApplyAlacrittyTheme applies theme to Alacritty terminal
-func (a *Applier) ApplyAlacrittyTheme(colors map[string]string) error {
-	content, err := a.replacer.ReplaceTemplate(alacrittyTemplate, colors)
-	if err != nil {
-		return fmt.Errorf("failed to process alacritty template: %w", err)
-	}
-
-	alacrittyPath := a.GetOutputPath("alacritty")
-
-	// Ensure directory exists
-	dir := filepath.Dir(alacrittyPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create alacritty themes directory: %w", err)
-	}
-
-	return paths.AtomicWrite(alacrittyPath, []byte(content))
-}
-
-// ApplyWeztermTheme applies theme to Wezterm terminal
-func (a *Applier) ApplyWeztermTheme(colors map[string]string) error {
-	content, err := a.replacer.ReplaceTemplate(weztermTemplate, colors)
-	if err != nil {
-		return fmt.Errorf("failed to process wezterm template: %w", err)
-	}
-
-	weztermPath := a.GetOutputPath("wezterm")
-
-	// Ensure directory exists
-	dir := filepath.Dir(weztermPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create wezterm themes directory: %w", err)
-	}
-
-	return paths.AtomicWrite(weztermPath, []byte(content))
-}
-
-// generateBtopTheme generates btop theme content
-func (a *Applier) generateBtopTheme(colors map[string]string) string {
-	// Use the replacer to process the template
-	content, _ := a.replacer.ReplaceTemplate(btopTemplate, colors)
-	return content
-}
-
-// generateFuzzelTheme generates fuzzel theme content
-func (a *Applier) generateFuzzelTheme(colors map[string]string) string {
-	// Fuzzel uses RGBA format, need to convert colors
-	bg := strings.TrimPrefix(colors["background"], "#")
-	fg := strings.TrimPrefix(colors["text"], "#")
-	primary := strings.TrimPrefix(colors["term4"], "#")
-	surface := strings.TrimPrefix(colors["term0"], "#")
-	outline := strings.TrimPrefix(colors["term8"], "#")
-
-	return fmt.Sprintf(`# Heimdall theme for fuzzel
-# Generated automatically
-
-[main]
-font=monospace:size=10
-dpi-aware=yes
-width=30
-horizontal-pad=20
-vertical-pad=10
-inner-pad=10
-
-[colors]
-background=%sdd
-text=%sff
-match=%sff
-selection=%sff
-selection-text=%sff
-selection-match=%sff
-border=%sff
-`, bg, fg, primary, surface, fg, primary, outline)
-}
-
-// generateSpicetifyTheme generates Spicetify theme content
-func (a *Applier) generateSpicetifyTheme(colors map[string]string) string {
-	// Use the replacer to process the template
-	content, _ := a.replacer.ReplaceTemplate(spicetifyTemplate, colors)
-	return content
-}
-
 // GetOutputPath returns the output path for a themed application
-// This is the single source of truth for all application theme paths
+// This first checks if the template has registered its own path,
+// otherwise falls back to config paths
 func (a *Applier) GetOutputPath(app string) string {
+	// Try to get path from template registry first
+	if path, err := appthemes.GetOutputPath(app); err == nil {
+		return path
+	}
+
+	// Fall back to config for non-template apps (like discord variants)
 	cfg := config.Get()
 	if cfg == nil {
 		// This should never happen, but if it does, return a sensible default
 		return filepath.Join(a.configDir, app, "heimdall.theme")
 	}
 
-	// All paths come from config (which has defaults set)
+	// Handle special cases that don't have templates
 	switch app {
-	case "btop":
-		return cfg.Theme.Paths.Btop
-	case "fuzzel":
-		return cfg.Theme.Paths.Fuzzel
-	case "gtk", "gtk3":
-		return cfg.Theme.Paths.Gtk3
-	case "gtk4":
-		return cfg.Theme.Paths.Gtk4
-	case "qt", "qt5":
-		return cfg.Theme.Paths.Qt5
-	case "qt6":
-		return cfg.Theme.Paths.Qt6
-	case "spicetify":
-		return cfg.Theme.Paths.Spicetify
-	case "kitty":
-		return cfg.Theme.Paths.Kitty
-	case "alacritty":
-		return cfg.Theme.Paths.Alacritty
-	case "wezterm":
-		return cfg.Theme.Paths.Wezterm
-	case "terminal":
-		return cfg.Theme.Paths.Terminal
 	case "vesktop":
 		return cfg.Theme.Paths.Vesktop
 	case "discord":
@@ -583,270 +442,3 @@ func (a *Applier) GetDiscordPaths() map[string]string {
 		"betterdiscord": cfg.Theme.Paths.BetterDiscord,
 	}
 }
-
-// getEmbeddedTemplate returns embedded template content
-func (a *Applier) getEmbeddedTemplate(app string) (string, error) {
-	// These would normally be embedded with go:embed
-	// For now, return basic templates
-	switch app {
-	case "btop":
-		return btopTemplate, nil
-	// Discord templates are now handled by the Discord client manager
-	case "fuzzel":
-		return fuzzelTemplate, nil
-	case "gtk", "gtk3", "gtk4":
-		return gtkTemplate, nil
-	case "qt", "qt5", "qt6":
-		return qtTemplate, nil
-	case "spicetify":
-		return spicetifyTemplate, nil
-	case "kitty":
-		return kittyTemplate, nil
-	case "alacritty":
-		return alacrittyTemplate, nil
-	case "wezterm":
-		return weztermTemplate, nil
-	default:
-		return "", fmt.Errorf("no embedded template for %s", app)
-	}
-}
-
-// Embedded template strings (simplified versions)
-const btopTemplate = `# Heimdall theme for btop
-# Generated automatically
-
-# Main background and foreground
-theme[main_bg]="#{{background.raw}}"
-theme[main_fg]="#{{text.raw}}"
-
-# Title
-theme[title]="#{{text.raw}}"
-
-# Highlight
-theme[hi_fg]="#{{term4.raw}}"
-
-# Selected
-theme[selected_bg]="#{{term8.raw}}"
-theme[selected_fg]="#{{term7.raw}}"
-
-# Status
-theme[inactive_fg]="#{{term8.raw}}"
-theme[graph_text]="#{{text.raw}}"
-
-# Process box
-theme[proc_misc]="#{{term5.raw}}"
-
-# CPU box
-theme[cpu_box]="#{{term4.raw}}"
-theme[cpu_text]="#{{term7.raw}}"
-
-# Memory/Disk box
-theme[mem_box]="#{{term5.raw}}"
-theme[mem_text]="#{{term7.raw}}"
-
-# Network box
-theme[net_box]="#{{term6.raw}}"
-theme[net_text]="#{{term7.raw}}"
-
-# Process list
-theme[proc_box]="#{{term0.raw}}"
-theme[proc_text]="#{{text.raw}}"
-`
-
-const fuzzelTemplate = `# Heimdall theme for fuzzel
-# Generated automatically
-
-[main]
-font=monospace:size=10
-dpi-aware=yes
-width=30
-horizontal-pad=20
-vertical-pad=10
-inner-pad=10
-
-[colors]
-background={{.colors.surface}}dd
-text={{.colors.on_surface}}ff
-match={{.colors.primary}}ff
-selection={{.colors.primary_container}}ff
-selection-text={{.colors.on_primary_container}}ff
-selection-match={{.colors.primary}}ff
-border={{.colors.outline}}ff
-`
-
-const gtkTemplate = `/* Heimdall theme for GTK */
-/* Generated automatically */
-
-@define-color background {{.colors.background}};
-@define-color surface {{.colors.surface}};
-@define-color surface_variant {{.colors.surface_variant}};
-
-@define-color primary {{.colors.primary}};
-@define-color primary_container {{.colors.primary_container}};
-@define-color secondary {{.colors.secondary}};
-@define-color secondary_container {{.colors.secondary_container}};
-
-@define-color on_background {{.colors.on_background}};
-@define-color on_surface {{.colors.on_surface}};
-@define-color on_surface_variant {{.colors.on_surface_variant}};
-
-@define-color outline {{.colors.outline}};
-@define-color outline_variant {{.colors.outline_variant}};
-
-@define-color error {{.colors.error}};
-
-/* Apply to GTK widgets */
-window {
-    background-color: @background;
-    color: @on_background;
-}
-
-button {
-    background-color: @primary;
-    color: @on_primary;
-}
-
-button:hover {
-    background-color: @primary_container;
-    color: @on_primary_container;
-}
-
-entry {
-    background-color: @surface;
-    color: @on_surface;
-    border-color: @outline;
-}
-`
-
-const qtTemplate = `# Heimdall theme for Qt
-# Generated automatically
-
-[ColorScheme]
-active_colors={{.colors.on_surface}}, {{.colors.surface}}, {{.colors.surface_variant}}, {{.colors.outline_variant}}, {{.colors.on_surface_variant}}, {{.colors.on_surface}}, {{.colors.on_surface}}, {{.colors.on_surface}}, {{.colors.on_surface}}, {{.colors.surface}}, {{.colors.background}}, {{.colors.on_background}}, {{.colors.primary}}, {{.colors.on_primary}}, {{.colors.primary_container}}, {{.colors.on_primary_container}}, {{.colors.surface_variant}}, {{.colors.on_surface}}, {{.colors.surface}}, {{.colors.on_surface}}, {{.colors.outline}}
-disabled_colors={{.colors.outline}}, {{.colors.surface}}, {{.colors.surface_variant}}, {{.colors.outline_variant}}, {{.colors.outline}}, {{.colors.outline}}, {{.colors.outline}}, {{.colors.outline}}, {{.colors.outline}}, {{.colors.surface}}, {{.colors.background}}, {{.colors.outline}}, {{.colors.surface_variant}}, {{.colors.outline}}, {{.colors.primary_container}}, {{.colors.outline}}, {{.colors.surface_variant}}, {{.colors.outline}}, {{.colors.surface}}, {{.colors.outline}}, {{.colors.outline_variant}}
-inactive_colors={{.colors.on_surface}}, {{.colors.surface}}, {{.colors.surface_variant}}, {{.colors.outline_variant}}, {{.colors.on_surface_variant}}, {{.colors.on_surface}}, {{.colors.on_surface}}, {{.colors.on_surface}}, {{.colors.on_surface}}, {{.colors.surface}}, {{.colors.background}}, {{.colors.on_background}}, {{.colors.primary}}, {{.colors.on_primary}}, {{.colors.primary_container}}, {{.colors.on_primary_container}}, {{.colors.surface_variant}}, {{.colors.on_surface}}, {{.colors.surface}}, {{.colors.on_surface}}, {{.colors.outline}}
-`
-
-const spicetifyTemplate = `# Heimdall theme for Spicetify
-# Generated automatically
-
-[Base]
-main_bg = {{background.raw}}
-sidebar_bg = {{term0.raw}}
-player_bg = {{term8.raw}}
-card_bg = {{term0.raw}}
-shadow = 000000
-main_fg = {{text.raw}}
-sidebar_fg = {{text.raw}}
-secondary_fg = {{term7.raw}}
-selected_button = {{term4.raw}}
-pressing_button_bg = {{term0.raw}}
-pressing_button_fg = {{text.raw}}
-miscellaneous_bg = {{term8.raw}}
-miscellaneous_hover_bg = {{term0.raw}}
-preserve_1 = ffffff
-`
-
-const kittyTemplate = `# Heimdall theme for Kitty
-# Generated automatically
-
-foreground #{{text.raw}}
-background #{{background.raw}}
-cursor #{{text.raw}}
-
-# Black
-color0 #{{term0.raw}}
-color8 #{{term8.raw}}
-
-# Red
-color1 #{{term1.raw}}
-color9 #{{term9.raw}}
-
-# Green
-color2 #{{term2.raw}}
-color10 #{{term10.raw}}
-
-# Yellow
-color3 #{{term3.raw}}
-color11 #{{term11.raw}}
-
-# Blue
-color4 #{{term4.raw}}
-color12 #{{term12.raw}}
-
-# Magenta
-color5 #{{term5.raw}}
-color13 #{{term13.raw}}
-
-# Cyan
-color6 #{{term6.raw}}
-color14 #{{term14.raw}}
-
-# White
-color7 #{{term7.raw}}
-color15 #{{term15.raw}}
-`
-
-const alacrittyTemplate = `# Heimdall theme for Alacritty
-# Generated automatically
-
-[colors.primary]
-background = "#{{background.raw}}"
-foreground = "#{{text.raw}}"
-
-[colors.normal]
-black = "#{{term0.raw}}"
-red = "#{{term1.raw}}"
-green = "#{{term2.raw}}"
-yellow = "#{{term3.raw}}"
-blue = "#{{term4.raw}}"
-magenta = "#{{term5.raw}}"
-cyan = "#{{term6.raw}}"
-white = "#{{term7.raw}}"
-
-[colors.bright]
-black = "#{{term8.raw}}"
-red = "#{{term9.raw}}"
-green = "#{{term10.raw}}"
-yellow = "#{{term11.raw}}"
-blue = "#{{term12.raw}}"
-magenta = "#{{term13.raw}}"
-cyan = "#{{term14.raw}}"
-white = "#{{term15.raw}}"
-`
-
-const weztermTemplate = `-- Heimdall theme for WezTerm
--- Generated automatically
-
-return {
-  color_scheme = "Heimdall",
-  color_schemes = {
-    ["Heimdall"] = {
-      background = "#{{background.raw}}",
-      foreground = "#{{text.raw}}",
-      cursor_bg = "#{{text.raw}}",
-      cursor_fg = "#{{background.raw}}",
-      ansi = {
-        "#{{term0.raw}}", -- black
-        "#{{term1.raw}}", -- red
-        "#{{term2.raw}}", -- green
-        "#{{term3.raw}}", -- yellow
-        "#{{term4.raw}}", -- blue
-        "#{{term5.raw}}", -- magenta
-        "#{{term6.raw}}", -- cyan
-        "#{{term7.raw}}", -- white
-      },
-      brights = {
-        "#{{term8.raw}}",  -- bright black
-        "#{{term9.raw}}",  -- bright red
-        "#{{term10.raw}}", -- bright green
-        "#{{term11.raw}}", -- bright yellow
-        "#{{term12.raw}}", -- bright blue
-        "#{{term13.raw}}", -- bright magenta
-        "#{{term14.raw}}", -- bright cyan
-        "#{{term15.raw}}", -- bright white
-      },
-    },
-  },
-}
-`
