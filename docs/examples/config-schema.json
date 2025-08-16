@@ -1,0 +1,474 @@
+{
+  "$id": "https://github.com/heimdall-cli/heimdall-cli/blob/main/docs/examples/config-schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Configuration schema for heimdall-cli",
+  "properties": {
+    "clipboard": {
+      "description": "Clipboard history and management settings",
+      "properties": {
+        "fuzzel_args": {
+          "default": "[\"--dmenu\", \"--width\", \"50\", \"--lines\", \"20\"]",
+          "description": "Additional arguments for Fuzzel launcher",
+          "examples": [
+            "[\"--dmenu\", \"--width\", \"60\"]"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max_entries": {
+          "default": "100",
+          "description": "Maximum number of clipboard history entries",
+          "examples": [
+            "200"
+          ],
+          "type": "integer"
+        },
+        "preview_length": {
+          "default": "50",
+          "description": "Maximum characters to show in preview",
+          "examples": [
+            "80"
+          ],
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "emoji": {
+      "description": "Emoji picker configuration and data sources",
+      "properties": {
+        "copy_to_clipboard": {
+          "default": "true",
+          "description": "Copy selected emoji to clipboard",
+          "examples": [
+            "false"
+          ],
+          "type": "boolean"
+        },
+        "download_timeout": {
+          "default": "30",
+          "description": "Timeout for downloading emoji data in seconds",
+          "examples": [
+            "60"
+          ],
+          "type": "integer"
+        },
+        "fuzzel_prompt": {
+          "default": "Emoji\u003e ",
+          "description": "Prompt text for emoji picker",
+          "examples": [
+            "😀 Pick: "
+          ],
+          "type": "string"
+        },
+        "sources": {
+          "default": "[\"emoji.json\"]",
+          "description": "Emoji data source files to use",
+          "examples": [
+            "[\"emoji.json\", \"custom.json\"]"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "external_tools": {
+      "description": "External tool paths and command overrides",
+      "properties": {
+        "app2unit": {
+          "default": "app2unit",
+          "description": "Path to app2unit systemd integration tool",
+          "examples": [
+            "/usr/bin/app2unit"
+          ],
+          "type": "string"
+        },
+        "cliphist": {
+          "default": "cliphist",
+          "description": "Path to cliphist clipboard manager",
+          "examples": [
+            "/usr/bin/cliphist"
+          ],
+          "type": "string"
+        },
+        "dart_sass": {
+          "default": "sass",
+          "description": "Path to Dart Sass compiler",
+          "examples": [
+            "/usr/bin/sass"
+          ],
+          "type": "string"
+        },
+        "dunstify": {
+          "default": "dunstify",
+          "description": "Path to dunstify notification tool",
+          "examples": [
+            "/usr/bin/dunstify"
+          ],
+          "type": "string"
+        },
+        "fuzzel": {
+          "default": "fuzzel",
+          "description": "Path to fuzzel launcher",
+          "examples": [
+            "/usr/bin/fuzzel"
+          ],
+          "type": "string"
+        },
+        "gdbus": {
+          "default": "gdbus",
+          "description": "Path to gdbus D-Bus tool",
+          "examples": [
+            "/usr/bin/gdbus"
+          ],
+          "type": "string"
+        },
+        "libnotify": {
+          "default": "notify-send",
+          "description": "Path to notify-send notification tool",
+          "examples": [
+            "/usr/bin/notify-send"
+          ],
+          "type": "string"
+        },
+        "pidof": {
+          "default": "pidof",
+          "description": "Path to pidof process finder",
+          "examples": [
+            "/usr/bin/pidof"
+          ],
+          "type": "string"
+        },
+        "pkill": {
+          "default": "pkill",
+          "description": "Path to pkill process killer",
+          "examples": [
+            "/usr/bin/pkill"
+          ],
+          "type": "string"
+        },
+        "qs": {
+          "default": "qs",
+          "description": "Path to Quickshell executable",
+          "examples": [
+            "/usr/bin/qs"
+          ],
+          "type": "string"
+        },
+        "slurp": {
+          "default": "slurp",
+          "description": "Path to slurp selection tool",
+          "examples": [
+            "/usr/bin/slurp"
+          ],
+          "type": "string"
+        },
+        "swappy": {
+          "default": "swappy",
+          "description": "Path to swappy screenshot editor",
+          "examples": [
+            "/usr/bin/swappy"
+          ],
+          "type": "string"
+        },
+        "wl_clipboard": {
+          "default": "wl-copy",
+          "description": "Path to wl-copy clipboard tool",
+          "examples": [
+            "/usr/bin/wl-copy"
+          ],
+          "type": "string"
+        },
+        "xclip": {
+          "default": "xclip",
+          "description": "Path to xclip X11 clipboard tool",
+          "examples": [
+            "/usr/bin/xclip"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "migrated_from": {
+      "description": "Previous version this config was migrated from",
+      "examples": [
+        "0.1.0"
+      ],
+      "type": "string"
+    },
+    "network": {
+      "description": "Network and IPC timeout configurations",
+      "properties": {
+        "hypr_ipc_timeout": {
+          "default": "5",
+          "description": "Hyprland IPC timeout in seconds",
+          "examples": [
+            "3"
+          ],
+          "type": "integer"
+        },
+        "ipc_timeout": {
+          "default": "5",
+          "description": "General IPC timeout in seconds",
+          "examples": [
+            "10"
+          ],
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "notification": {
+      "description": "System notification preferences and providers",
+      "type": "object"
+    },
+    "paths": {
+      "description": "Custom paths for templates, schemes, and data directories",
+      "properties": {
+        "data_dir": {
+          "description": "Directory for application data",
+          "examples": [
+            "~/.local/share/heimdall"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "pip": {
+      "description": "Picture-in-Picture window management settings",
+      "properties": {
+        "video_apps": {
+          "default": "[\"mpv\", \"vlc\", \"firefox\", \"chromium\", \"chrome\", \"brave\", \"youtube\", \"netflix\", \"twitch\", \"spotify\"]",
+          "description": "Applications to detect for PIP mode",
+          "examples": [
+            "[\"firefox\", \"mpv\"]"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "video_keywords": {
+          "default": "[\"youtube\", \"netflix\", \"twitch\", \"vimeo\", \"- playing\", \"▶\", \"►\", \"video\", \"stream\"]",
+          "description": "Window title keywords to detect video playback",
+          "examples": [
+            "[\"youtube\", \"video\"]"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "recording": {
+      "description": "Screen recording configuration",
+      "properties": {
+        "file_format": {
+          "default": "mp4",
+          "description": "Video format (mp4, webm, mkv)",
+          "examples": [
+            "webm"
+          ],
+          "type": "string"
+        },
+        "file_name_pattern": {
+          "default": "recording_%Y%m%d_%H%M%S",
+          "description": "Filename pattern with date format codes",
+          "examples": [
+            "rec_%Y-%m-%d_%H-%M-%S"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "scheme": {
+      "description": "Color scheme settings and Material You configuration",
+      "type": "object"
+    },
+    "screenshot": {
+      "description": "Screenshot capture and processing settings",
+      "properties": {
+        "copy_to_clipboard": {
+          "default": "true",
+          "description": "Copy screenshot to clipboard after capture",
+          "examples": [
+            "false"
+          ],
+          "type": "boolean"
+        },
+        "directory": {
+          "description": "Directory to save screenshots",
+          "examples": [
+            "~/Pictures/Screenshots"
+          ],
+          "type": "string"
+        },
+        "file_format": {
+          "default": "png",
+          "description": "Image format (png, jpg, webp)",
+          "examples": [
+            "webp"
+          ],
+          "type": "string"
+        },
+        "file_name_pattern": {
+          "default": "screenshot_%Y%m%d_%H%M%S",
+          "description": "Filename pattern with date format codes",
+          "examples": [
+            "screen_%Y-%m-%d_%H-%M-%S"
+          ],
+          "type": "string"
+        },
+        "freeze_file_name": {
+          "default": "freeze.png",
+          "description": "Temporary filename for freeze screenshots",
+          "examples": [
+            "temp_freeze.png"
+          ],
+          "type": "string"
+        },
+        "notification_timeout": {
+          "default": "3",
+          "description": "Notification display duration in seconds",
+          "examples": [
+            "5"
+          ],
+          "type": "integer"
+        },
+        "open_with_swappy": {
+          "default": "true",
+          "description": "Open screenshot in Swappy editor after capture",
+          "examples": [
+            "false"
+          ],
+          "type": "boolean"
+        },
+        "show_notification": {
+          "default": "true",
+          "description": "Show notification after screenshot capture",
+          "examples": [
+            "true"
+          ],
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "shell": {
+      "description": "Quickshell daemon configuration for the UI shell",
+      "properties": {
+        "args": {
+          "default": "[\"-c\", \"heimdall\", \"-n\"]",
+          "description": "Arguments to pass to Quickshell",
+          "examples": [
+            "[\"-c\", \"heimdall\", \"-n\"]"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "log_file": {
+          "default": "shell.log",
+          "description": "Log file name for shell output",
+          "examples": [
+            "shell.log"
+          ],
+          "type": "string"
+        },
+        "log_rules": {
+          "description": "Logging rules for Quickshell (Qt logging format)",
+          "examples": [
+            "*.debug=false"
+          ],
+          "type": "string"
+        },
+        "pid_file": {
+          "default": "shell.pid",
+          "description": "PID file name for shell process",
+          "examples": [
+            "shell.pid"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "theme": {
+      "description": "Theme application settings for various applications",
+      "properties": {
+        "paths": {
+          "properties": {
+            "fuzzel": {
+              "description": "Path to Fuzzel launcher colors configuration",
+              "examples": [
+                "~/.config/fuzzel/colors.ini"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "toggles": {
+      "description": "Workspace-specific application toggle configurations",
+      "type": "object"
+    },
+    "version": {
+      "default": "0.2.0",
+      "description": "Configuration version for migration and compatibility checking",
+      "examples": [
+        "0.2.0"
+      ],
+      "type": "string"
+    },
+    "wallpaper": {
+      "description": "Wallpaper management and filtering settings",
+      "properties": {
+        "extensions": {
+          "default": "[\".jpg\", \".jpeg\", \".png\", \".webp\"]",
+          "description": "Supported image file extensions",
+          "examples": [
+            "[\".jpg\", \".png\"]"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "smart_mode": {
+          "default": "true",
+          "description": "Use intelligent wallpaper selection based on scheme colors",
+          "examples": [
+            "true"
+          ],
+          "type": "boolean"
+        },
+        "threshold": {
+          "default": "0.8",
+          "description": "Color similarity threshold for filtering (0.0-1.0, higher = stricter)",
+          "examples": [
+            "0.7"
+          ],
+          "type": "number"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "Heimdall CLI Configuration",
+  "type": "object"
+}

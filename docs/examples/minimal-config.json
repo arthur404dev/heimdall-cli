@@ -1,0 +1,9 @@
+{
+  "scheme": {
+    "default": "catppuccin-mocha"
+  },
+  "theme": {
+    "enableQt": false,
+    "enableSpicetify": false
+  }
+}

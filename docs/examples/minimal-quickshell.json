@@ -1,0 +1,11 @@
+{
+  "shell": {
+    "args": [
+      "-c",
+      "heimdall",
+      "-n"
+    ],
+    "command": "qs"
+  },
+  "version": "0.2.0"
+}

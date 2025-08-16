@@ -1,0 +1,7 @@
+{
+  "theme": {
+    "enableKitty": true,
+    "enableTerm": true
+  },
+  "version": "0.2.0"
+}

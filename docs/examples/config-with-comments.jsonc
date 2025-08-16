@@ -1,0 +1,79 @@
+// Heimdall CLI Configuration File
+// This file contains all available configuration options with their default values.
+// You can remove any settings you don't want to customize - Heimdall will use defaults.
+// Note: This is a JSONC file (JSON with Comments). Remove comments before using as config.json.
+
+{
+  // Configuration version for migration
+  "version": "0.2.0",
+
+  // Theme application settings
+  "theme": {
+    // Apply themes to terminal emulators
+    "enableTerm": true,
+    // Apply themes to Hyprland window manager
+    "enableHypr": true,
+    // Apply themes to Discord clients
+    "enableDiscord": true,
+    // Apply themes to Spotify via Spicetify
+    "enableSpicetify": true,
+    // Apply themes to Fuzzel launcher
+    "enableFuzzel": true,
+    // Apply themes to btop system monitor
+    "enableBtop": true,
+    // Apply themes to GTK applications
+    "enableGtk": true,
+    // Apply themes to Qt applications
+    "enableQt": true,
+    // Apply themes to Kitty terminal
+    "enableKitty": true,
+    // Apply themes to Alacritty terminal
+    "enableAlacritty": false,
+    // Apply themes to WezTerm terminal
+    "enableWezterm": false
+  },
+
+  // Quickshell integration settings
+  "shell": {
+    // Command to execute shell
+    "command": "qs",
+    // Arguments for shell command
+    "args": ["-c", "heimdall", "-n"],
+    // Port for daemon communication
+    "daemon_port": 9999,
+    // Path to log file
+    "log_file": "shell.log",
+    // Path to PID file
+    "pid_file": "shell.pid",
+    // IPC timeout in seconds
+    "ipc_timeout": 5
+  },
+
+  // Color scheme settings
+  "scheme": {
+    // Default color scheme to use
+    "default": "rosepine",
+    // Automatically switch between light/dark variants
+    "auto_mode": true,
+    // Generate Material You schemes from wallpapers
+    "material_you": true,
+    // Paths to search for user-defined schemes
+    "user_paths": ["~/.config/heimdall/schemes"],
+    // Path to store generated schemes
+    "generated_path": "~/.local/share/heimdall/schemes"
+  },
+
+  // Wallpaper management settings
+  "wallpaper": {
+    // Directory containing wallpapers
+    "directory": "~/Pictures/Wallpapers",
+    // Enable smart filtering based on aspect ratio
+    "filter": true,
+    // Similarity threshold for filtering (0.0-1.0)
+    "threshold": 0.8,
+    // Enable intelligent wallpaper selection
+    "smart_mode": true,
+    // Supported image file extensions
+    "extensions": [".jpg", ".jpeg", ".png", ".webp"]
+  }
+}

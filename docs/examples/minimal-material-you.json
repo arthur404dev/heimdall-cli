@@ -1,0 +1,10 @@
+{
+  "scheme": {
+    "material_you": true
+  },
+  "version": "0.2.0",
+  "wallpaper": {
+    "directory": "~/Pictures/Wallpapers",
+    "smart_mode": true
+  }
+}

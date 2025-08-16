@@ -12,7 +12,11 @@
   },
   "shell": {
     "command": "qs",
-    "args": ["-c", "heimdall", "-n"],
+    "args": [
+      "-c",
+      "heimdall",
+      "-n"
+    ],
     "daemon_port": 9999,
     "log_file": "shell.log",
     "pid_file": "shell.pid",
@@ -21,14 +25,23 @@
   "scheme": {
     "default": "rosepine",
     "auto_mode": true,
-    "material_you": true
+    "material_you": true,
+    "user_paths": [
+      "~/.config/heimdall/schemes"
+    ],
+    "generated_path": "~/.local/share/heimdall/schemes"
   },
   "wallpaper": {
     "directory": "~/Pictures/Wallpapers",
     "filter": true,
     "threshold": 0.8,
     "smart_mode": true,
-    "extensions": [".jpg", ".jpeg", ".png", ".webp"]
+    "extensions": [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".webp"
+    ]
   },
   "screenshot": {
     "directory": "~/Pictures/Screenshots",
@@ -51,15 +64,26 @@
   "clipboard": {
     "max_entries": 100,
     "fuzzel_prompt": "Clipboard> ",
-    "fuzzel_args": ["--dmenu", "--width", "50", "--lines", "20"],
+    "fuzzel_args": [
+      "--dmenu",
+      "--width",
+      "50",
+      "--lines",
+      "20"
+    ],
     "preview_length": 50,
     "delete_on_select": false
   },
   "emoji": {
     "data_directory": "~/.local/share/emoji",
-    "sources": ["emoji.json"],
+    "sources": [
+      "emoji.json"
+    ],
     "fuzzel_prompt": "Emoji> ",
-    "fuzzel_args": ["--dmenu", "--prompt"],
+    "fuzzel_args": [
+      "--dmenu",
+      "--prompt"
+    ],
     "copy_to_clipboard": true,
     "type_directly": false,
     "download_timeout": 30
@@ -70,12 +94,27 @@
     "window_size": "25%",
     "window_position": "bottom-right",
     "video_apps": [
-      "mpv", "vlc", "firefox", "chromium", "chrome",
-      "brave", "youtube", "netflix", "twitch", "spotify"
+      "mpv",
+      "vlc",
+      "firefox",
+      "chromium",
+      "chrome",
+      "brave",
+      "youtube",
+      "netflix",
+      "twitch",
+      "spotify"
     ],
     "video_keywords": [
-      "youtube", "netflix", "twitch", "vimeo",
-      "- playing", "▶", "►", "video", "stream"
+      "youtube",
+      "netflix",
+      "twitch",
+      "vimeo",
+      "- playing",
+      "▶",
+      "►",
+      "video",
+      "stream"
     ],
     "pin_windows": true,
     "always_on_top": true

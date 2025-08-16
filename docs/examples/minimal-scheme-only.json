@@ -1,0 +1,8 @@
+{
+  "scheme": {
+    "auto_mode": true,
+    "default": "catppuccin-mocha",
+    "material_you": false
+  },
+  "version": "0.2.0"
+}

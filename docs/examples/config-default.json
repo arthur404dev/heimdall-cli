@@ -1,0 +1,102 @@
+{
+  "clipboard": {
+    "history_size": 100,
+    "persist": true,
+    "sync": false
+  },
+  "emoji": {
+    "close_after_selection": true,
+    "copy_to_clipboard": true,
+    "picker_command": "fuzzel-emoji"
+  },
+  "idle": {
+    "enable_lock": true,
+    "enable_sleep": false,
+    "lock_command": "hyprlock",
+    "sleep_command": "systemctl suspend",
+    "timeout": 300,
+    "warning_time": 30
+  },
+  "pip": {
+    "always_on_top": true,
+    "border": true,
+    "opacity": 0.9,
+    "position": "bottom-right",
+    "shadow": true,
+    "size": "medium"
+  },
+  "record": {
+    "audio": true,
+    "directory": "~/Videos/Recordings",
+    "file_format": "mp4",
+    "file_name_pattern": "recording_%Y%m%d_%H%M%S",
+    "fps": 30,
+    "microphone": false,
+    "quality": "high",
+    "show_mouse": true
+  },
+  "scheme": {
+    "auto_mode": true,
+    "default": "rosepine",
+    "generated_path": "~/.local/share/heimdall/schemes",
+    "material_you": true,
+    "user_paths": [
+      "~/.config/heimdall/schemes"
+    ]
+  },
+  "screenshot": {
+    "capture_decorations": true,
+    "capture_mouse": false,
+    "copy_to_clipboard": true,
+    "delay": 0,
+    "directory": "~/Pictures/Screenshots",
+    "file_format": "png",
+    "file_name_pattern": "screenshot_%Y%m%d_%H%M%S",
+    "open_after_capture": false,
+    "quality": 100
+  },
+  "shell": {
+    "args": [
+      "-c",
+      "heimdall",
+      "-n"
+    ],
+    "command": "qs",
+    "daemon_port": 9999,
+    "ipc_timeout": 5,
+    "log_file": "shell.log",
+    "pid_file": "shell.pid"
+  },
+  "theme": {
+    "enableAlacritty": false,
+    "enableBtop": true,
+    "enableDiscord": true,
+    "enableFuzzel": true,
+    "enableGtk": true,
+    "enableHypr": true,
+    "enableKitty": true,
+    "enableQt": true,
+    "enableSpicetify": true,
+    "enableTerm": true,
+    "enableWezterm": false
+  },
+  "toggle": {
+    "animations": true,
+    "blur": true,
+    "shadows": true,
+    "transparency": true
+  },
+  "version": "0.2.0",
+  "wallpaper": {
+    "directory": "~/Pictures/Wallpapers",
+    "extensions": [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".webp"
+    ],
+    "filter": true,
+    "smart_mode": true,
+    "threshold": 0.8
+  }
+}

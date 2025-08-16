@@ -1,0 +1,207 @@
+# Neovim/LazyVim Integration with Heimdall
+
+## Overview
+
+Heimdall can automatically generate color scheme overrides for Neovim when using the Catppuccin plugin with LazyVim. This ensures your Neovim colors stay in sync with your system theme.
+
+## Setup
+
+### 1. Enable Nvim in Heimdall Config
+
+First, ensure nvim theme generation is enabled in your heimdall config:
+
+```json
+{
+  "theme": {
+    "enableNvim": true,
+    "paths": {
+      "nvim": "~/.config/nvim/lua/plugins/heimdall.lua"
+    }
+  }
+}
+```
+
+### 2. Import in Your LazyVim Configuration
+
+In your LazyVim catppuccin configuration file (typically `~/.config/nvim/lua/plugins/colorscheme.lua` or similar), import the heimdall overrides:
+
+```lua
+-- Check if heimdall colors exist and load them
+local heimdall_ok, heimdall = pcall(require, "plugins.heimdall")
+local color_overrides = {}
+
+if heimdall_ok then
+  color_overrides = heimdall.color_overrides
+end
+
+return {
+  {
+    "LazyVim/LazyVim",
+    opts = {
+      colorscheme = "catppuccin-mocha", -- or your preferred flavour
+    },
+  },
+  {
+    "catppuccin/nvim",
+    name = "catppuccin",
+    opts = {
+      transparent_background = true,
+      term_colors = false,
+      color_overrides = color_overrides, -- Use heimdall colors if available
+      integrations = {
+        blink_cmp = true,
+        neotree = true,
+        -- your other integrations
+      },
+    },
+  },
+}
+```
+
+### 3. Alternative: Direct Setup Method
+
+If you want heimdall to automatically apply the colorscheme when loaded, you can use the setup method:
+
+```lua
+return {
+  {
+    "catppuccin/nvim",
+    name = "catppuccin",
+    config = function()
+      -- Load catppuccin first
+      require("catppuccin").setup({
+        transparent_background = true,
+        term_colors = false,
+        integrations = {
+          blink_cmp = true,
+          neotree = true,
+        },
+      })
+      
+      -- Then apply heimdall overrides if available
+      local ok, heimdall = pcall(require, "plugins.heimdall")
+      if ok and heimdall.setup then
+        heimdall.setup()
+      else
+        -- Fallback to default colorscheme if heimdall not available
+        vim.cmd.colorscheme("catppuccin-mocha")
+      end
+    end,
+  },
+}
+```
+
+## How It Works
+
+1. When you run `heimdall scheme set <scheme>`, heimdall generates a `heimdall.lua` file at the configured path
+2. This file contains color overrides that match your selected system theme
+3. The file exports a table with `color_overrides` that's compatible with catppuccin's configuration
+4. Your Neovim config imports these overrides and applies them to catppuccin
+
+## Generated File Structure
+
+The generated `heimdall.lua` file contains:
+
+```lua
+local M = {}
+
+M.color_overrides = {
+  all = {
+    -- Base colors
+    base = "#303446",
+    mantle = "#292c3c",
+    crust = "#232634",
+    
+    -- Surface colors
+    surface0 = "#414559",
+    surface1 = "#51576d",
+    surface2 = "#626880",
+    
+    -- ... other color definitions
+  },
+}
+
+return M
+```
+
+## Supported Colors
+
+The following catppuccin color types are supported and will be synchronized:
+
+### Base Colors
+- `base` - Default background
+- `mantle` - Darker background
+- `crust` - Darkest background
+
+### Surface Colors
+- `surface0` - Lightest surface
+- `surface1` - Medium surface
+- `surface2` - Darkest surface
+
+### Overlay Colors
+- `overlay0` - Lightest overlay
+- `overlay1` - Medium overlay
+- `overlay2` - Darkest overlay
+
+### Text Colors
+- `text` - Primary text
+- `subtext0` - Secondary text
+- `subtext1` - Tertiary text
+
+### Catppuccin Palette
+- `rosewater`, `flamingo`, `pink`, `mauve`
+- `red`, `maroon`, `peach`, `yellow`
+- `green`, `teal`, `sky`, `sapphire`
+- `blue`, `lavender`
+
+## Automatic Reload
+
+To automatically reload Neovim when the theme changes, you can add a file watcher in your config:
+
+```lua
+-- Watch for heimdall.lua changes
+vim.api.nvim_create_autocmd("BufWritePost", {
+  pattern = "*/plugins/heimdall.lua",
+  callback = function()
+    -- Reload the heimdall module
+    package.loaded["plugins.heimdall"] = nil
+    
+    -- Reapply the colorscheme
+    local ok, heimdall = pcall(require, "plugins.heimdall")
+    if ok and heimdall.setup then
+      heimdall.setup()
+    end
+  end,
+})
+```
+
+## Troubleshooting
+
+### Colors Not Applying
+1. Check that the heimdall.lua file exists: `ls ~/.config/nvim/lua/plugins/heimdall.lua`
+2. Verify it's being loaded: Add `print("Heimdall loaded")` to the file temporarily
+3. Ensure catppuccin is installed and loaded before applying overrides
+
+### File Not Generated
+1. Verify nvim is enabled in heimdall config: `heimdall config get theme.enableNvim`
+2. Check the configured path: `heimdall config get theme.paths.nvim`
+3. Ensure the directory exists: `mkdir -p ~/.config/nvim/lua/plugins/`
+
+### Colors Look Wrong
+1. Make sure you're using a heimdall scheme that has catppuccin color definitions
+2. Try regenerating: `heimdall scheme set <your-scheme>`
+3. Restart Neovim after regeneration
+
+## Custom Path
+
+You can customize where the heimdall.lua file is generated by modifying your heimdall config:
+
+```bash
+heimdall config set theme paths.nvim "~/.config/nvim/lua/custom/heimdall.lua"
+```
+
+Then update your import path accordingly:
+
+```lua
+local heimdall_ok, heimdall = pcall(require, "custom.heimdall")
+```
