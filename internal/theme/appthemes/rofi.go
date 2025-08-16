@@ -1,3 +1,10 @@
+package appthemes
+
+func init() {
+	Register(&Template{
+		Name:        "rofi",
+		Description: "Rofi configuration",
+		Content: `
 /* Heimdall theme for Rofi */
 
 * {
@@ -5,7 +12,7 @@
     foreground: {{foreground}};
     selected-background: {{colour4}};
     selected-foreground: {{background}};
-    alternate-background: {{background|lighten:5}};
+    alternate-background: {{colour0}};
     border-color: {{colour8}};
 }
 
@@ -45,7 +52,6 @@ element selected {
     background-color: @selected-background;
     text-color: @selected-foreground;
 }
-
-element alternate {
-    background-color: @alternate-background;
+`,
+	})
 }

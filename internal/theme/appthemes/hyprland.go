@@ -1,3 +1,10 @@
+package appthemes
+
+func init() {
+	Register(&Template{
+		Name:        "hyprland",
+		Description: "Hyprland configuration",
+		Content: `
 # Heimdall color scheme for Hyprland
 
 $background = rgb({{background.raw}})
@@ -20,3 +27,6 @@ $color14 = rgb({{colour14.raw}})
 $color15 = rgb({{colour15.raw}})
 $accent = rgb({{colour4.raw}})
 $accent_alt = rgb({{colour5.raw}})
+`,
+	})
+}

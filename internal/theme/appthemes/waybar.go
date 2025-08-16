@@ -1,3 +1,10 @@
+package appthemes
+
+func init() {
+	Register(&Template{
+		Name:        "waybar",
+		Description: "Waybar configuration",
+		Content: `
 /* Heimdall theme for Waybar */
 
 * {
@@ -13,7 +20,7 @@ window#waybar {
 }
 
 #workspaces button {
-    background-color: {{background|lighten:5}};
+    background-color: {{colour0}};
     color: {{foreground}};
     padding: 0 5px;
 }
@@ -43,4 +50,11 @@ window#waybar {
 
 #network.disconnected {
     color: {{colour1}};
+}
+
+#pulseaudio.muted {
+    color: {{colour8}};
+}
+`,
+	})
 }
