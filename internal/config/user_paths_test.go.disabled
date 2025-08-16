@@ -1,0 +1,365 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestSchemeConfigUserPaths(t *testing.T) {
+	tests := []struct {
+		name          string
+		configJSON    string
+		envVar        string
+		expectedPaths []string
+	}{
+		{
+			name: "default user paths",
+			configJSON: `{
+				"scheme": {}
+			}`,
+			envVar: "",
+			expectedPaths: []string{
+				filepath.Join(os.Getenv("HOME"), ".config/heimdall/schemes"),
+			},
+		},
+		{
+			name: "custom user paths in config",
+			configJSON: `{
+				"scheme": {
+					"user_paths": [
+						"~/.config/custom/schemes",
+						"/usr/share/schemes"
+					]
+				}
+			}`,
+			envVar: "",
+			expectedPaths: []string{
+				filepath.Join(os.Getenv("HOME"), ".config/custom/schemes"),
+				"/usr/share/schemes",
+			},
+		},
+		{
+			name: "environment variable override",
+			configJSON: `{
+				"scheme": {
+					"user_paths": ["~/.config/custom/schemes"]
+				}
+			}`,
+			envVar: "/env/path1:/env/path2",
+			expectedPaths: []string{
+				"/env/path1",
+				"/env/path2",
+			},
+		},
+		{
+			name: "environment variable with tilde expansion",
+			configJSON: `{
+				"scheme": {}
+			}`,
+			envVar: "~/schemes1:~/schemes2:/absolute/path",
+			expectedPaths: []string{
+				filepath.Join(os.Getenv("HOME"), "schemes1"),
+				filepath.Join(os.Getenv("HOME"), "schemes2"),
+				"/absolute/path",
+			},
+		},
+		{
+			name: "empty environment variable uses config",
+			configJSON: `{
+				"scheme": {
+					"user_paths": ["/config/path"]
+				}
+			}`,
+			envVar:        "",
+			expectedPaths: []string{"/config/path"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp config file
+			tempDir := t.TempDir()
+			configFile := filepath.Join(tempDir, "config.json")
+			err := os.WriteFile(configFile, []byte(tt.configJSON), 0644)
+			require.NoError(t, err)
+
+			// Set environment variable if specified
+			if tt.envVar != "" {
+				os.Setenv("HEIMDALL_SCHEME_PATHS", tt.envVar)
+				defer os.Unsetenv("HEIMDALL_SCHEME_PATHS")
+			}
+
+			// Load config
+			cfg, err := LoadConfig(configFile)
+			require.NoError(t, err)
+
+			// Get user paths (this should handle env var override)
+			paths := cfg.Scheme.GetUserPaths()
+
+			// Verify paths
+			assert.Equal(t, tt.expectedPaths, paths)
+		})
+	}
+}
+
+func TestUserPathsExpansion(t *testing.T) {
+	home := os.Getenv("HOME")
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "tilde expansion",
+			input:    "~/schemes",
+			expected: filepath.Join(home, "schemes"),
+		},
+		{
+			name:     "tilde with subdirs",
+			input:    "~/.config/heimdall/schemes",
+			expected: filepath.Join(home, ".config/heimdall/schemes"),
+		},
+		{
+			name:     "absolute path unchanged",
+			input:    "/usr/share/schemes",
+			expected: "/usr/share/schemes",
+		},
+		{
+			name:     "relative path unchanged",
+			input:    "./schemes",
+			expected: "./schemes",
+		},
+		{
+			name:     "empty path",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := expandPath(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEnvironmentVariableParsing(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		expected []string
+	}{
+		{
+			name:     "single path",
+			envValue: "/single/path",
+			expected: []string{"/single/path"},
+		},
+		{
+			name:     "multiple paths",
+			envValue: "/path1:/path2:/path3",
+			expected: []string{"/path1", "/path2", "/path3"},
+		},
+		{
+			name:     "paths with tilde",
+			envValue: "~/path1:~/path2",
+			expected: []string{
+				filepath.Join(os.Getenv("HOME"), "path1"),
+				filepath.Join(os.Getenv("HOME"), "path2"),
+			},
+		},
+		{
+			name:     "mixed absolute and tilde paths",
+			envValue: "/absolute:~/relative:/another/absolute",
+			expected: []string{
+				"/absolute",
+				filepath.Join(os.Getenv("HOME"), "relative"),
+				"/another/absolute",
+			},
+		},
+		{
+			name:     "empty segments ignored",
+			envValue: "/path1::/path2",
+			expected: []string{"/path1", "/path2"},
+		},
+		{
+			name:     "whitespace trimmed",
+			envValue: " /path1 : /path2 ",
+			expected: []string{"/path1", "/path2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("HEIMDALL_SCHEME_PATHS", tt.envValue)
+			defer os.Unsetenv("HEIMDALL_SCHEME_PATHS")
+
+			paths := parseSchemePathsEnv()
+			assert.Equal(t, tt.expected, paths)
+		})
+	}
+}
+
+func TestSchemeConfigDefaults(t *testing.T) {
+	// Test that scheme config has proper defaults
+	cfg := &Config{}
+	cfg.SetDefaults()
+
+	assert.NotNil(t, cfg.Scheme)
+	assert.NotEmpty(t, cfg.Scheme.UserPaths)
+
+	// Default should be XDG config path
+	expectedDefault := filepath.Join(os.Getenv("HOME"), ".config/heimdall/schemes")
+	assert.Contains(t, cfg.Scheme.UserPaths, expectedDefault)
+}
+
+func TestSchemeConfigMigration(t *testing.T) {
+	// Test migration from old config format if applicable
+	oldConfig := `{
+		"scheme": {
+			"name": "catppuccin",
+			"variant": "mocha"
+		}
+	}`
+
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "config.json")
+	err := os.WriteFile(configFile, []byte(oldConfig), 0644)
+	require.NoError(t, err)
+
+	cfg, err := LoadConfig(configFile)
+	require.NoError(t, err)
+
+	// Should have default user paths even with old config
+	assert.NotEmpty(t, cfg.Scheme.UserPaths)
+	assert.Equal(t, "catppuccin", cfg.Scheme.Name)
+	assert.Equal(t, "mocha", cfg.Scheme.Variant)
+}
+
+func TestConfigSaveWithUserPaths(t *testing.T) {
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "config.json")
+
+	// Create config with custom user paths
+	cfg := &Config{
+		Scheme: &SchemeConfig{
+			Name:    "test-scheme",
+			Variant: "default",
+			UserPaths: []string{
+				"~/custom/schemes",
+				"/usr/share/schemes",
+			},
+		},
+	}
+
+	// Save config
+	err := cfg.Save(configFile)
+	require.NoError(t, err)
+
+	// Load it back
+	loaded, err := LoadConfig(configFile)
+	require.NoError(t, err)
+
+	// Verify user paths were saved
+	assert.Equal(t, cfg.Scheme.UserPaths, loaded.Scheme.UserPaths)
+	assert.Equal(t, cfg.Scheme.Name, loaded.Scheme.Name)
+	assert.Equal(t, cfg.Scheme.Variant, loaded.Scheme.Variant)
+}
+
+func TestGetUserPathsMethod(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *SchemeConfig
+		envVar   string
+		expected []string
+	}{
+		{
+			name:     "nil config returns defaults",
+			config:   nil,
+			envVar:   "",
+			expected: []string{filepath.Join(os.Getenv("HOME"), ".config/heimdall/schemes")},
+		},
+		{
+			name: "empty user paths returns defaults",
+			config: &SchemeConfig{
+				UserPaths: []string{},
+			},
+			envVar:   "",
+			expected: []string{filepath.Join(os.Getenv("HOME"), ".config/heimdall/schemes")},
+		},
+		{
+			name: "config paths expanded",
+			config: &SchemeConfig{
+				UserPaths: []string{"~/test", "/absolute"},
+			},
+			envVar: "",
+			expected: []string{
+				filepath.Join(os.Getenv("HOME"), "test"),
+				"/absolute",
+			},
+		},
+		{
+			name: "env var overrides config",
+			config: &SchemeConfig{
+				UserPaths: []string{"~/config/path"},
+			},
+			envVar: "~/env/path",
+			expected: []string{
+				filepath.Join(os.Getenv("HOME"), "env/path"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envVar != "" {
+				os.Setenv("HEIMDALL_SCHEME_PATHS", tt.envVar)
+				defer os.Unsetenv("HEIMDALL_SCHEME_PATHS")
+			}
+
+			var paths []string
+			if tt.config != nil {
+				paths = tt.config.GetUserPaths()
+			} else {
+				// Test default behavior
+				cfg := &SchemeConfig{}
+				paths = cfg.GetUserPaths()
+			}
+
+			assert.Equal(t, tt.expected, paths)
+		})
+	}
+}
+
+// Helper functions
+
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home := os.Getenv("HOME")
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
+func parseSchemePathsEnv() []string {
+	envValue := os.Getenv("HEIMDALL_SCHEME_PATHS")
+	if envValue == "" {
+		return nil
+	}
+
+	parts := strings.Split(envValue, ":")
+	var paths []string
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			paths = append(paths, expandPath(part))
+		}
+	}
+	return paths
+}
